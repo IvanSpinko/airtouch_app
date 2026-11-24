@@ -8,21 +8,42 @@ Check: ``python -m gesture_control.tracker`` shows a window with hand landmarks.
 
 from __future__ import annotations
 
+import contextlib
 import os
+import sys
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
+import cv2
+import mediapipe as mp
+import numpy as np
+from mediapipe.tasks.python import BaseOptions, vision
+
 from gesture_control import config
 
-# Silence MediaPipe / TFLite info logs; must be set before mediapipe is imported.
-for _name, _level in config.NATIVE_LOG_LEVELS.items():
-    os.environ.setdefault(_name, _level)
 
-import cv2  # noqa: E402
-import mediapipe as mp  # noqa: E402
-import numpy as np  # noqa: E402
-from mediapipe.tasks.python import BaseOptions, vision  # noqa: E402
+@contextlib.contextmanager
+def native_stderr_silenced():
+    """Temporarily points file descriptor 2 to the null device.
+
+    MediaPipe / LiteRT print INFO lines from C++ straight to fd 2 when the model is
+    created, on the first frames and on close; Python-level logging settings and
+    env vars do not reach them.
+    """
+    if not config.SILENCE_NATIVE_LOGS:
+        yield
+        return
+    sys.stderr.flush()
+    saved = os.dup(2)
+    devnull = os.open(os.devnull, os.O_WRONLY)
+    try:
+        os.dup2(devnull, 2)
+        yield
+    finally:
+        os.dup2(saved, 2)
+        os.close(devnull)
+        os.close(saved)
 
 # Landmark connections used to draw the hand skeleton.
 HAND_CONNECTIONS = (
@@ -80,11 +101,14 @@ class HandTracker:
             min_hand_presence_confidence=config.MIN_HAND_PRESENCE_CONFIDENCE,
             min_tracking_confidence=config.MIN_TRACKING_CONFIDENCE,
         )
-        self._landmarker = vision.HandLandmarker.create_from_options(options)
+        with native_stderr_silenced():
+            self._landmarker = vision.HandLandmarker.create_from_options(options)
         self._last_ts_ms = -1
+        self._frames = 0
 
     def close(self) -> None:
-        self._landmarker.close()
+        with native_stderr_silenced():
+            self._landmarker.close()
 
     def __enter__(self) -> "HandTracker":
         return self
@@ -99,7 +123,12 @@ class HandTracker:
         # VIDEO mode requires strictly increasing timestamps.
         ts_ms = max(int(timestamp_s * 1000), self._last_ts_ms + 1)
         self._last_ts_ms = ts_ms
-        result = self._landmarker.detect_for_video(image, ts_ms)
+        if self._frames < config.SILENCED_WARMUP_FRAMES:
+            self._frames += 1
+            with native_stderr_silenced():
+                result = self._landmarker.detect_for_video(image, ts_ms)
+        else:
+            result = self._landmarker.detect_for_video(image, ts_ms)
         if not result.hand_landmarks:
             return None
         lms = np.array(

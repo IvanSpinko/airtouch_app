@@ -30,12 +30,17 @@ HAND_MODEL_URL = (
 )
 HAND_MODEL_DOWNLOAD_TIMEOUT_S = 60
 MAX_HANDS = 1
-MIN_HAND_DETECTION_CONFIDENCE = 0.6
-MIN_HAND_PRESENCE_CONFIDENCE = 0.5
-MIN_TRACKING_CONFIDENCE = 0.5
+# Lower values keep tracking the hand through blur and odd angles instead of
+# dropping it (which freezes the cursor); a single user is assumed, so false
+# detections of other hands are not a concern.
+MIN_HAND_DETECTION_CONFIDENCE = 0.5
+MIN_HAND_PRESENCE_CONFIDENCE = 0.4
+MIN_TRACKING_CONFIDENCE = 0.4
 NUM_LANDMARKS = 21
-# Environment variables that quiet native MediaPipe / TFLite logging.
-NATIVE_LOG_LEVELS = {"GLOG_minloglevel": "2", "TF_CPP_MIN_LOG_LEVEL": "2"}
+# Hide MediaPipe / LiteRT native INFO logs on start-up and shutdown.
+SILENCE_NATIVE_LOGS = True
+# The first frames also print one-off native warnings; silence that many.
+SILENCED_WARMUP_FRAMES = 3
 
 # MediaPipe hand landmark indices.
 LM_WRIST = 0
