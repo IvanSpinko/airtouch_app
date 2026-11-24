@@ -348,3 +348,22 @@ def test_auto_scroll_invert(monkeypatch):
     r = auto_rig(monkeypatch)
     r.run(G.TWO_FINGERS, (0.5, 0.3), seconds=0.5)
     assert scrolled(r) < 0
+
+
+# -- detector + controller together ---------------------------------------------------
+def test_quick_middle_pinch_tap_clicks_left_button_end_to_end():
+    from handgen import make_hand
+
+    from gesture_control.gestures import GestureDetector
+
+    r = Rig()
+    d = GestureDetector()
+    point = make_hand(("index",))
+    pinch = make_hand(("index",), thumb_tip="middle")
+    pinch[9:13] = make_hand(("index", "middle"))[9:13]  # middle extended to meet the thumb
+    pinch[4] = pinch[12] + (0.005, 0.005, 0)
+    frames = [point] * 15 + [pinch] * 2 + [point] * 10
+    for lm in frames:
+        r.ctl.update(d.update(lm), (0.5, 0.5), r.t)
+        r.t += DT
+    assert r.buttons.events == [("press", "left"), ("release", "left")]

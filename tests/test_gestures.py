@@ -315,3 +315,35 @@ def test_detector_passes_handedness_to_model():
     d = GestureDetector(Spy({Gesture.POINT: 0.9}))
     d.update(make_hand(("index",)), "Left")
     assert calls == ["Left"]
+
+
+# -- pinch confirmation ----------------------------------------------------------------
+def thumb_between(bias):
+    """Thumb tip between index and middle tips; bias < 0.5 = closer to middle."""
+    hand = make_hand(("index", "middle"))
+    idx = np.array([hand[8, 0] * config.FRAME_ASPECT, hand[8, 1]])
+    mid = np.array([hand[12, 0] * config.FRAME_ASPECT, hand[12, 1]])
+    return make_hand(("index", "middle"), thumb_tip=tuple(mid + (idx - mid) * bias + (0, 0.01)))
+
+
+def test_quick_tap_of_two_frames_is_a_click():
+    d = ready_detector()
+    pinch = POSES["pinch_middle"][0]
+    seen = [d.update(pinch) for _ in range(2)]
+    assert seen[-1] == Gesture.PINCH_MIDDLE
+
+
+def test_flipping_closest_finger_still_confirms_pinch():
+    closer_mid, closer_idx = thumb_between(0.4), thumb_between(0.6)
+    for h in (closer_mid, closer_idx):
+        f = compute_features(h)
+        assert max(f.pinch_index, f.pinch_middle) < config.PINCH_ON_RATIO  # both "pinched"
+    d = ready_detector()
+    seen = [d.update(h) for h in (closer_mid, closer_idx, closer_mid, closer_idx)]
+    assert any(g in (Gesture.PINCH_INDEX, Gesture.PINCH_MIDDLE) for g in seen[:2])
+
+
+def test_majority_decides_pinch_type():
+    d = ready_detector()
+    frames = [thumb_between(0.3)] * config.PINCH_CONFIRM_FRAMES  # clearly closer to middle
+    assert [d.update(h) for h in frames][-1] == Gesture.PINCH_MIDDLE
