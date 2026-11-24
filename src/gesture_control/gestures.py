@@ -166,10 +166,21 @@ def classify_pose(f: HandFeatures) -> Gesture:
     return Gesture.NONE
 
 
-class GestureDetector:
-    """Stateful detector: pinch hysteresis + debouncing of static poses."""
+PINCHES = (Gesture.PINCH_INDEX, Gesture.PINCH_MIDDLE)
 
-    def __init__(self) -> None:
+
+class GestureDetector:
+    """Stateful detector: pinch hysteresis + debouncing of static poses.
+
+    With a trained ``classifier`` (stage 3) static poses come from the model when it
+    is confident, and a threshold pinch only counts if the model agrees it is that
+    pinch — this filters accidental clicks from odd hand angles. Without a model
+    the rule-based logic is used alone.
+    """
+
+    def __init__(self, classifier: GestureClassifier | None = None) -> None:
+        self.classifier = classifier
+        self.probs: dict[Gesture, float] | None = None
         self.reset()
 
     def reset(self) -> None:
@@ -205,6 +216,8 @@ class GestureDetector:
             candidate = (
                 Gesture.PINCH_INDEX if f.pinch_index <= f.pinch_middle else Gesture.PINCH_MIDDLE
             )
+            if self.probs is not None and self.probs.get(candidate, 0.0) < config.CLASSIFIER_PINCH_MIN_PROB:
+                candidate = None  # the model does not see a pinch here
         if candidate is not None and candidate is self._pinch_candidate:
             self._pinch_frames += 1
         else:
@@ -216,8 +229,16 @@ class GestureDetector:
             self._pinch_frames = 0
         return self._pinch
 
+    def _raw_pose(self, f: HandFeatures) -> Gesture:
+        if self.probs is not None:
+            top = max(self.probs, key=self.probs.get)
+            # Pinches are handled by the threshold path; for the pose they are pointing.
+            if self.probs[top] >= config.CLASSIFIER_MIN_PROB:
+                return Gesture.POINT if top in PINCHES else top
+        return classify_pose(f)
+
     def _update_pose(self, f: HandFeatures) -> Gesture:
-        raw = classify_pose(f)
+        raw = self._raw_pose(f)
         if raw is self._pose_candidate:
             self._pose_frames += 1
         else:
@@ -230,7 +251,7 @@ class GestureDetector:
             self._pose = raw
         return self._pose
 
-    def update(self, landmarks: np.ndarray | None) -> Gesture:
+    def update(self, landmarks: np.ndarray | None, handedness: str = "Right") -> Gesture:
         if landmarks is None:
             self._lost_frames += 1
             if self._lost_frames > config.HAND_LOST_GRACE_FRAMES:
@@ -239,11 +260,15 @@ class GestureDetector:
         self._lost_frames = 0
         self._seen_frames += 1
         f = compute_features(landmarks)
+        self.probs = self.classifier.predict(landmarks, handedness) if self.classifier else None
         pose = self._update_pose(f)
         # A fist brings all fingertips close to the thumb, so it must never count as
         # a pinch — checked on the raw current frame, not the debounced pose, so a
         # click cannot slip through while the fist is still being confirmed.
-        if f.is_fist:
+        model_fist = self.probs is not None and (
+            self.probs.get(Gesture.FIST, 0.0) >= config.CLASSIFIER_MIN_PROB
+        )
+        if f.is_fist or model_fist:
             self._pinch = self._pinch_candidate = None
             self._pinch_frames = 0
             self._last = pose
@@ -259,7 +284,8 @@ def _demo() -> None:
     from gesture_control.camera import Camera
     from gesture_control.tracker import HandTracker, draw_hand
 
-    detector = GestureDetector()
+    detector = GestureDetector(GestureClassifier.load_if_available())
+    print("classifier:", "trained model" if detector.classifier else "rules only")
     with Camera() as cam, HandTracker() as tracker:
         while cam.is_running:
             item = cam.read(timeout=1.0)
@@ -267,7 +293,8 @@ def _demo() -> None:
                 continue
             frame, ts = item
             hand = tracker.process(frame, ts)
-            gesture = detector.update(hand.landmarks if hand else None)
+            gesture = detector.update(hand.landmarks if hand else None,
+                                      hand.handedness if hand else "Right")
             frame = frame.copy()
             text = gesture.value
             if hand is not None:
