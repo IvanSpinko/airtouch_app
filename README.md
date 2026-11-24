@@ -96,6 +96,22 @@ screen point.
 | Scroll         | index + middle **held together**, thumb tucked, ring + pinky folded; then hold the hand above / below that spot (auto scroll) |
 | Pause / resume | hold a fist for ~1 s                                         |
 
+## How clicks work
+
+Each pinch has a **strength** from 0 to 100%, shown as the `L` (left button) and `R`
+(right button) bars at the bottom of the preview:
+
+- the button goes **down** when the bar reaches the **yellow** line (`PINCH_STRENGTH_ON`, 90%)
+  for 2 frames;
+- it goes **up** when the bar falls below the **orange** line (`PINCH_STRENGTH_OFF`, 30%);
+- the bar turns green while the button is held, and the action (`LEFT CLICK`, `DRAG`,
+  `RIGHT CLICK`, `PAUSED`...) flashes at the top.
+
+With a trained model the strength is the model's confidence in the pinch, or 100% when the
+fingertips touch and the model at least half agrees. Without a model it is the fingertip
+distance alone. If clicks fire too easily, raise `PINCH_STRENGTH_ON`; if a drag drops too
+easily, lower `PINCH_STRENGTH_OFF`.
+
 ## Stage 2 — how to verify
 
 1. `python -m gesture_control.main`; the preview shows the recognized `Gesture:`.
