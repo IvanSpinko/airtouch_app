@@ -53,9 +53,9 @@ def test_filter_resets_after_hand_lost():
 
 def test_no_reset_during_continuous_tracking():
     m = CursorMapper(W, H, WorkZone(0.0, 0.0, 1.0, 1.0, 1.0), lost_reset_s=0.3, mode="absolute")
-    m.update(0.0, 0.0, 0.0)
-    x, y = m.update(1.0, 1.0, DT)
-    assert x < W - 1 and y < H - 1  # smoothed, not jumped
+    m.update(0.5, 0.5, 0.0)
+    x, y = m.update(0.55, 0.55, DT)  # fast but plausible hand move
+    assert 0.5 * (W - 1) < x < 0.55 * (W - 1)  # smoothed, not jumped
 
 
 def test_glide_moves_part_of_the_way():
@@ -150,3 +150,35 @@ def test_relative_reaches_corner_with_a_flick():
 def test_unknown_mode_rejected():
     with pytest.raises(ValueError):
         CursorMapper(W, H, mode="nope")
+
+
+
+# -- outlier rejection ------------------------------------------------------------
+def test_single_frame_jump_is_ignored():
+    m = relative()
+    for i in range(10):
+        m.update(0.5, 0.5, i * DT)
+    pos = m.update(0.5, 0.5, 10 * DT) or (500, 500)
+    assert m.update(0.95, 0.1, 11 * DT) is None  # glitch frame
+    after = m.update(0.5, 0.5, 12 * DT)
+    assert after is None or after == pos
+
+
+def test_persistent_jump_reanchors_without_moving_cursor():
+    m = relative()
+    for i in range(10):
+        m.update(0.5, 0.5, i * DT)
+    outs = [m.update(0.9, 0.9, (10 + k) * DT) for k in range(config.OUTLIER_CONFIRM_FRAMES + 3)]
+    assert all(o is None or o == (500, 500) for o in outs)
+    # and normal tracking resumes from the new place
+    moved = None
+    for k in range(20):
+        moved = m.update(0.9 + k * 0.005, 0.9, (20 + k) * DT) or moved
+    assert moved is not None and moved[0] > 500
+
+
+def test_absolute_mode_also_rejects_glitch():
+    m = CursorMapper(W, H, FULL, deadzone_px=0.0, mode="absolute")
+    for i in range(30):
+        m.update(0.5, 0.5, i * DT)
+    assert m.update(0.0, 0.0, 30 * DT) is None
