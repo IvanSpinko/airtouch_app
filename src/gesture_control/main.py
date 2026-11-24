@@ -69,8 +69,9 @@ def run() -> None:
     enable_dpi_awareness()
     width, height = screen_size()
     zone = WorkZone()
-    mapper = CursorMapper(width, height, zone)
     mouse = Mouse()
+    # Relative mode continues from wherever the real cursor is.
+    mapper = CursorMapper(width, height, zone, position_source=lambda: mouse.position)
     animator = CursorAnimator(mouse)
     detector = GestureDetector()
     ctl = GestureController(mapper, animator, mouse)
