@@ -86,10 +86,18 @@ def test_fist_never_triggers_pinch():
     assert results[-1] == Gesture.FIST
 
 
-def test_lost_hand_resets():
+def test_short_hand_loss_keeps_gesture():
     d = GestureDetector()
     feed(d, POSES["pinch_index"][0], 3)
-    assert d.update(None) == Gesture.NONE
+    for _ in range(config.HAND_LOST_GRACE_FRAMES):
+        assert d.update(None) == Gesture.PINCH_INDEX
+    assert d.update(POSES["pinch_index"][0]) == Gesture.PINCH_INDEX
+
+
+def test_long_hand_loss_resets():
+    d = GestureDetector()
+    feed(d, POSES["pinch_index"][0], 3)
+    assert feed(d, None, config.HAND_LOST_GRACE_FRAMES + 1) == Gesture.NONE
     assert d.update(POSES["pinch_index"][0]) != Gesture.PINCH_INDEX  # needs confirmation again
 
 

@@ -87,6 +87,8 @@ class GestureDetector:
         self.reset()
 
     def reset(self) -> None:
+        self._lost_frames = 0
+        self._last = Gesture.NONE
         self._pinch: Gesture | None = None
         self._pinch_candidate: Gesture | None = None
         self._pinch_frames = 0
@@ -133,8 +135,11 @@ class GestureDetector:
 
     def update(self, landmarks: np.ndarray | None) -> Gesture:
         if landmarks is None:
-            self.reset()
-            return Gesture.NONE
+            self._lost_frames += 1
+            if self._lost_frames > config.HAND_LOST_GRACE_FRAMES:
+                self.reset()
+            return self._last
+        self._lost_frames = 0
         f = compute_features(landmarks)
         pose = self._update_pose(f)
         # A fist brings all fingertips close to the thumb, so it must never count as
@@ -143,9 +148,11 @@ class GestureDetector:
         if f.extended_count == 0:
             self._pinch = self._pinch_candidate = None
             self._pinch_frames = 0
+            self._last = pose
             return pose
         pinch = self._update_pinch(f)
-        return pinch if pinch is not None else pose
+        self._last = pinch if pinch is not None else pose
+        return self._last
 
 
 def _demo() -> None:
