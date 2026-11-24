@@ -389,3 +389,44 @@ def test_open_fingers_pinch_with_model():
     ok = make_hand(("middle", "ring", "pinky"), thumb_tip="index")
     d, _ = model_detector({Gesture.PINCH_INDEX: 0.9})
     assert feed(d, ok, config.PINCH_CONFIRM_FRAMES) == Gesture.PINCH_INDEX
+
+
+# -- model-only pinches (fingertips far apart) --------------------------------------
+def side_pinch():
+    """Curled pinch where the thumb presses the side of the index finger: the
+    fingertip landmarks stay far apart, so the distance rule never fires."""
+    hand = make_hand((), thumb_tip=FIST_THUMB)
+    hand[4, :2] = (0.40 / config.FRAME_ASPECT, 0.84)  # thumb low on the index side, not at the tip
+    return hand
+
+
+def test_side_pinch_is_invisible_to_the_distance_rule():
+    assert compute_features(side_pinch()).pinch_index > config.PINCH_OFF_RATIO
+    seen = [ready_detector().update(side_pinch()) for _ in range(5)]
+    assert Gesture.PINCH_INDEX not in seen
+
+
+def test_confident_model_starts_pinch_without_distance():
+    d, _ = model_detector({Gesture.PINCH_INDEX: 0.9})
+    assert feed(d, side_pinch(), config.PINCH_CONFIRM_FRAMES) == Gesture.PINCH_INDEX
+
+
+def test_unsure_model_does_not_start_pinch_alone():
+    d, _ = model_detector({Gesture.PINCH_INDEX: config.CLASSIFIER_PINCH_ON_PROB - 0.1})
+    assert Gesture.PINCH_INDEX not in [d.update(side_pinch()) for _ in range(10)]
+
+
+def test_model_holds_and_releases_side_pinch():
+    d, clf = model_detector({Gesture.PINCH_INDEX: 0.9})
+    feed(d, side_pinch(), config.PINCH_CONFIRM_FRAMES)
+    clf.set({Gesture.PINCH_INDEX: config.CLASSIFIER_PINCH_HOLD_PROB + 0.05})
+    assert feed(d, side_pinch(), 10) == Gesture.PINCH_INDEX  # held (drag)
+    clf.set({Gesture.POINT: 0.9})
+    assert feed(d, side_pinch(), config.PINCH_RELEASE_FRAMES) != Gesture.PINCH_INDEX
+
+
+def test_model_only_pinch_respects_acquisition_grace():
+    clf = FakeClassifier({Gesture.PINCH_INDEX: 0.95})
+    d = GestureDetector(clf)
+    seen = [d.update(side_pinch()) for _ in range(config.ACQUIRE_GRACE_FRAMES)]
+    assert Gesture.PINCH_INDEX not in seen
