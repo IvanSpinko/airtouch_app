@@ -76,9 +76,12 @@ PALM_LANDMARKS = (LM_WRIST, LM_INDEX_MCP, LM_MIDDLE_MCP, LM_RING_MCP, LM_PINKY_M
 # --- Rule-based gestures ------------------------------------------------------
 # All distances are relative to the palm size (wrist -> middle finger MCP),
 # so thresholds do not depend on how far the hand is from the camera.
-# Pinch hysteresis: starts below ON, ends above OFF.
+# Fingertip distance -> pinch strength: touching (<= ON) = 1, apart (>= OFF) = 0.
 PINCH_ON_RATIO = 0.25
 PINCH_OFF_RATIO = 0.38
+# Button goes down when the pinch strength reaches ON, up when it drops below OFF.
+PINCH_STRENGTH_ON = 0.9
+PINCH_STRENGTH_OFF = 0.3
 # Consecutive pinch frames before it counts (filters single-frame glitches). Keep
 # this small: a quick tap lasts only 2-3 frames. The click still lands at the
 # pre-pinch spot thanks to CLICK_LOOKBACK_S.
@@ -119,19 +122,10 @@ GESTURE_TEST_SPLIT = MODELS_DIR / "test_split.npz"
 USE_CLASSIFIER = True
 # Static pose from the classifier is trusted only above this probability.
 CLASSIFIER_MIN_PROB = 0.6
-# A threshold pinch only clicks if the classifier gives that pinch at least this
-# probability (cuts accidental clicks from odd hand angles).
+# Pinch strength (0..1, shown as a bar in the preview) combines the model's
+# probability with fingertip distance. Fingertip distance only counts if the model
+# gives that pinch at least this probability.
 CLASSIFIER_PINCH_MIN_PROB = 0.4
-# The model alone starts a pinch at this probability, even when the fingertip
-# distance rule does not fire (e.g. a pinch with the other fingers curled in,
-# where the thumb presses the side of the index finger).
-CLASSIFIER_PINCH_ON_PROB = 0.9
-# A model-only pinch (fingertips not close) must last this many frames — real
-# pinches are held a bit, fingers merely passing close by are not.
-CLASSIFIER_PINCH_CONFIRM_FRAMES = 3
-# A started pinch is held while the model gives it at least this probability
-# (or the fingertips stay close), so model-only pinches can be dragged.
-CLASSIFIER_PINCH_HOLD_PROB = 0.4
 
 # Recording (ml/record.py)
 RECORD_TARGET_PER_CLASS = 500

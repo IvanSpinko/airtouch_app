@@ -45,6 +45,10 @@ class HandFeatures:
     def extended_count(self) -> int:
         return sum(self.extended.values())
 
+    def distance(self, pinch: "Gesture") -> float:
+        """Thumb-tip distance to the fingertip of the given pinch."""
+        return self.pinch_index if pinch is Gesture.PINCH_INDEX else self.pinch_middle
+
     @property
     def is_fist(self) -> bool:
         """No finger extended AND every fingertip is curled in close to the palm.
@@ -169,19 +173,47 @@ def classify_pose(f: HandFeatures) -> Gesture:
 PINCHES = (Gesture.PINCH_INDEX, Gesture.PINCH_MIDDLE)
 
 
+def distance_strength(d: float) -> float:
+    """1 when the fingertips touch (<= PINCH_ON_RATIO), 0 when apart (>= PINCH_OFF_RATIO)."""
+    on, off = config.PINCH_ON_RATIO, config.PINCH_OFF_RATIO
+    return min(max((off - d) / (off - on), 0.0), 1.0)
+
+
+def pinch_strength(
+    pinch: Gesture, f: HandFeatures, probs: dict[Gesture, float] | None, gate: bool = True
+) -> float:
+    """How strongly the hand shows ``pinch``, 0..1.
+
+    - no model: fingertip distance only;
+    - with a model: the model's probability, or the distance strength if the model
+      at least half agrees (``gate``: fingertips touching from an odd angle can
+      look like a pinch to the rule but not to the model — no click then).
+      Holding an already started pinch uses ``gate=False``, so a drag survives a
+      momentary model wobble while the fingertips stay together.
+    """
+    rule = distance_strength(f.distance(pinch))
+    if probs is None:
+        return rule
+    p = probs.get(pinch, 0.0)
+    if gate and p < config.CLASSIFIER_PINCH_MIN_PROB:
+        rule = 0.0
+    return max(p, rule)
+
+
 class GestureDetector:
-    """Stateful detector: pinch hysteresis + debouncing of static poses.
+    """Stateful detector: pinch strength with hysteresis + debounced static poses.
 
     With a trained ``classifier`` (stage 3) static poses come from the model when it
-    is confident, and a threshold pinch only counts if the model agrees it is that
-    pinch — this filters accidental clicks from odd hand angles. Without a model
-    the rule-based logic is used alone.
+    is confident, and the pinch strength combines the model with fingertip distance
+    (see ``pinch_strength``). Without a model the rule-based logic is used alone.
     """
 
     def __init__(self, classifier: GestureClassifier | None = None) -> None:
         self.classifier = classifier
         self.probs: dict[Gesture, float] | None = None
         self.features: HandFeatures | None = None
+        # Current pinch strength per finger (0..1), for the preview meter.
+        self.strength: dict[Gesture, float] = {g: 0.0 for g in PINCHES}
         self.reset()
 
     def reset(self) -> None:
@@ -192,19 +224,21 @@ class GestureDetector:
         self._pinch: Gesture | None = None
         self._pinch_votes = {g: 0 for g in PINCHES}
         self._pinch_frames = 0
-        self._pinch_model_only = False
         self._pose = Gesture.NONE
         self._pose_candidate = Gesture.NONE
         self._pose_frames = 0
 
     def _update_pinch(self, f: HandFeatures) -> Gesture | None:
+        """Pinch state machine on a single 0..1 pinch strength per finger.
+
+        Pressed when the strength reaches PINCH_STRENGTH_ON for PINCH_CONFIRM_FRAMES
+        frames, released once it stays below PINCH_STRENGTH_OFF for
+        PINCH_RELEASE_FRAMES frames.
+        """
         if self._pinch is not None:
-            dist = f.pinch_index if self._pinch is Gesture.PINCH_INDEX else f.pinch_middle
-            model_holds = (
-                self.probs is not None
-                and self.probs.get(self._pinch, 0.0) >= config.CLASSIFIER_PINCH_HOLD_PROB
-            )
-            if dist < config.PINCH_OFF_RATIO or model_holds:
+            held = pinch_strength(self._pinch, f, self.probs, gate=False)
+            self.strength[self._pinch] = held
+            if held >= config.PINCH_STRENGTH_OFF:
                 self._release_frames = 0
                 return self._pinch
             # Release only after a few open frames, so a flicker mid-drag does not
@@ -215,42 +249,25 @@ class GestureDetector:
             self._pinch = None
             self._release_frames = 0
 
-        candidate = None
         # Right after the hand appears its landmarks are unreliable: no new clicks.
         acquiring = self._seen_frames <= config.ACQUIRE_GRACE_FRAMES
-        if not acquiring and min(f.pinch_index, f.pinch_middle) < config.PINCH_ON_RATIO:
-            candidate = (
-                Gesture.PINCH_INDEX if f.pinch_index <= f.pinch_middle else Gesture.PINCH_MIDDLE
-            )
-            if self.probs is not None and self.probs.get(candidate, 0.0) < config.CLASSIFIER_PINCH_MIN_PROB:
-                candidate = None  # the model does not see a pinch here
-        if candidate is None and not acquiring and self.probs is not None:
-            # Pinches made with the other fingers curled in (thumb against the side of
-            # the index finger) keep the fingertip landmarks far apart, so the distance
-            # rule never fires — but the trained model recognizes them.
-            best = max(PINCHES, key=lambda g: self.probs.get(g, 0.0))
-            if self.probs.get(best, 0.0) >= config.CLASSIFIER_PINCH_ON_PROB:
-                candidate = best
-                self._pinch_model_only = True
+        best = max(PINCHES, key=lambda g: (self.strength[g], -f.distance(g)))
+        candidate = None
+        if not acquiring and self.strength[best] >= config.PINCH_STRENGTH_ON:
+            candidate = best
         if candidate is None:
             self._pinch_frames = 0
             self._pinch_votes = {g: 0 for g in PINCHES}
-            self._pinch_model_only = False
             return self._pinch
         # Count consecutive frames of *any* pinch: with the thumb between index and
-        # middle the closer finger can flip from frame to frame, which must not
+        # middle the stronger finger can flip from frame to frame, which must not
         # restart the count. The type is decided by majority when confirmed.
         self._pinch_frames += 1
         self._pinch_votes[candidate] += 1
-        needed = (
-            config.CLASSIFIER_PINCH_CONFIRM_FRAMES if self._pinch_model_only
-            else config.PINCH_CONFIRM_FRAMES
-        )
-        if self._pinch_frames >= needed:
+        if self._pinch_frames >= config.PINCH_CONFIRM_FRAMES:
             self._pinch = max(PINCHES, key=lambda g: (self._pinch_votes[g], g is candidate))
             self._pinch_frames = 0
             self._pinch_votes = {g: 0 for g in PINCHES}
-            self._pinch_model_only = False
         return self._pinch
 
     def _raw_pose(self, f: HandFeatures) -> Gesture:
@@ -286,6 +303,7 @@ class GestureDetector:
         f = compute_features(landmarks)
         self.features = f
         self.probs = self.classifier.predict(landmarks, handedness) if self.classifier else None
+        self.strength = {g: pinch_strength(g, f, self.probs) for g in PINCHES}
         pose = self._update_pose(f)
         # A fist brings all fingertips close to the thumb, so it must never count as
         # a pinch — checked on the raw current frame, not the debounced pose, so a
