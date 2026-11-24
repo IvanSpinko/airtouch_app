@@ -112,6 +112,17 @@ fingertips touch and the model at least half agrees. Without a model it is the f
 distance alone. If clicks fire too easily, raise `PINCH_STRENGTH_ON`; if a drag drops too
 easily, lower `PINCH_STRENGTH_OFF`.
 
+### Diagnosing false clicks
+
+1. Run `python -m gesture_control.main --log` and use the app as usual.
+2. Right after a false click / stuck button / wrong right click press **`m`** in the preview
+   window — the action flash shows `MARKED`.
+3. Quit, then run `python -m ml.replay`: it replays the newest `data/session-*.csv` through the
+   current code and prints, for every mark, the last 3 seconds frame by frame (gesture, L / R
+   strength, what the model saw, which action fired).
+
+The log holds hand landmarks and actions only — no images — and stays in `data/` (not in git).
+
 ## Stage 2 — how to verify
 
 1. `python -m gesture_control.main`; the preview shows the recognized `Gesture:`.
