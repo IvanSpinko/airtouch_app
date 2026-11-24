@@ -261,9 +261,12 @@ class FakeClassifier:
 
 
 def model_detector(probs):
-    clf = FakeClassifier(probs)
+    """Detector past the acquisition grace (warmed up on a neutral pose), whose
+    model then returns ``probs``."""
+    clf = FakeClassifier({Gesture.POINT: 0.9})
     d = GestureDetector(clf)
     feed(d, make_hand(("index",)), config.ACQUIRE_GRACE_FRAMES + 1)
+    clf.set(probs)
     return d, clf
 
 
@@ -407,8 +410,17 @@ def test_side_pinch_is_invisible_to_the_distance_rule():
 
 
 def test_confident_model_starts_pinch_without_distance():
-    d, _ = model_detector({Gesture.PINCH_INDEX: 0.9})
-    assert feed(d, side_pinch(), config.PINCH_CONFIRM_FRAMES) == Gesture.PINCH_INDEX
+    d, _ = model_detector({Gesture.PINCH_INDEX: 0.95})
+    n = config.CLASSIFIER_PINCH_CONFIRM_FRAMES
+    seen = [d.update(side_pinch()) for _ in range(n)]
+    assert Gesture.PINCH_INDEX not in seen[:-1]  # needs the longer confirmation
+    assert seen[-1] == Gesture.PINCH_INDEX
+
+
+def test_slightly_squeezed_fingers_need_very_confident_model():
+    """At 0.7-0.9 the model alone no longer clicks (was too sensitive)."""
+    d, _ = model_detector({Gesture.PINCH_INDEX: 0.85})
+    assert Gesture.PINCH_INDEX not in [d.update(side_pinch()) for _ in range(10)]
 
 
 def test_unsure_model_does_not_start_pinch_alone():
@@ -417,8 +429,8 @@ def test_unsure_model_does_not_start_pinch_alone():
 
 
 def test_model_holds_and_releases_side_pinch():
-    d, clf = model_detector({Gesture.PINCH_INDEX: 0.9})
-    feed(d, side_pinch(), config.PINCH_CONFIRM_FRAMES)
+    d, clf = model_detector({Gesture.PINCH_INDEX: 0.95})
+    assert feed(d, side_pinch(), config.CLASSIFIER_PINCH_CONFIRM_FRAMES) == Gesture.PINCH_INDEX
     clf.set({Gesture.PINCH_INDEX: config.CLASSIFIER_PINCH_HOLD_PROB + 0.05})
     assert feed(d, side_pinch(), 10) == Gesture.PINCH_INDEX  # held (drag)
     clf.set({Gesture.POINT: 0.9})
