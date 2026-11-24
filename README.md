@@ -86,7 +86,7 @@ over the whole screen and a hand position always maps to the same screen point.
 | Double click   | two quick thumb + middle pinches                             |
 | Drag           | thumb + middle pinch, hold ~0.3 s, then move; open to drop   |
 | Right click    | pinch: thumb + index finger                                  |
-| Scroll         | index + middle **held together**, thumb tucked, ring + pinky folded; move hand up / down |
+| Scroll         | index + middle **held together**, thumb tucked, ring + pinky folded; then hold the hand above / below that spot (auto scroll) |
 | Pause / resume | hold a fist for ~1 s                                         |
 
 ## Stage 2 — how to verify
@@ -95,7 +95,9 @@ over the whole screen and a hand position always maps to the same screen point.
 2. **Click / open a file:** point at a file in Explorer, make two quick thumb + middle
    pinches — it opens. The index finger stays still, so the cursor does not move.
 3. **Drag a window:** point at a window title bar, thumb + middle pinch, move the hand, open.
-4. **Scroll:** open a long web page, show two fingers and move the hand up / down.
+4. **Scroll:** open a long web page, show two fingers held together, then raise the hand a
+   little and hold it — the page keeps scrolling (orange line in the preview = start point);
+   further from the line = faster; open the fingers to stop.
 5. **Right click:** thumb + index pinch on the desktop opens the context menu.
 6. **Pause:** hold a fist ~1 s — status turns `PAUSED`, nothing reacts; hold a fist again to resume.
 
@@ -110,7 +112,9 @@ If a gesture is not recognized, run `python -m gesture_control.gestures` and loo
 - scroll does not start → raise `SCROLL_FINGERS_TOGETHER_RATIO` or lower `SCROLL_THUMB_AWAY_RATIO`;
 - the page scrolls while getting ready to click → the opposite of the line above;
 - double click is not registered → raise `CLICK_SETTLE_S`;
-- scroll too slow / fast → `SCROLL_TICKS_PER_FRAME`, direction → `SCROLL_INVERT`;
+- auto scroll too slow / fast → `SCROLL_AUTO_SPEED`, `SCROLL_AUTO_MAX_TICKS_S`;
+- scrolls while the hand is held still → raise `SCROLL_AUTO_DEADZONE`;
+- direction → `SCROLL_INVERT`; page-follows-hand scrolling instead → `SCROLL_MODE = "drag"`;
 - swap which pinch is left / right → `LEFT_BUTTON_GESTURE`, `RIGHT_BUTTON_GESTURE`;
 - the hand is lost too often → lower `MIN_HAND_*_CONFIDENCE`, add light, keep the
   whole hand inside the camera frame;
