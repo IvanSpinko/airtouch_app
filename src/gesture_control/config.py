@@ -34,6 +34,8 @@ MIN_HAND_DETECTION_CONFIDENCE = 0.6
 MIN_HAND_PRESENCE_CONFIDENCE = 0.5
 MIN_TRACKING_CONFIDENCE = 0.5
 NUM_LANDMARKS = 21
+# Environment variables that quiet native MediaPipe / TFLite logging.
+NATIVE_LOG_LEVELS = {"GLOG_minloglevel": "2", "TF_CPP_MIN_LOG_LEVEL": "2"}
 
 # MediaPipe hand landmark indices.
 LM_WRIST = 0
@@ -60,11 +62,21 @@ CURSOR_SENSITIVITY = 1.0
 # --- Cursor smoothing (One Euro Filter, in screen pixels) ----------------------
 # min_cutoff — lower = stronger jitter smoothing at rest.
 # beta — higher = less lag during fast movement.
-FILTER_MIN_CUTOFF = 1.0
-FILTER_BETA = 0.01
+FILTER_MIN_CUTOFF = 0.5
+FILTER_BETA = 0.02
 FILTER_D_CUTOFF = 1.0
 # Cursor moves smaller than this (px) are ignored — removes micro-jitter.
-CURSOR_DEADZONE_PX = 1.5
+CURSOR_DEADZONE_PX = 2.5
+
+# --- Cursor animation ---------------------------------------------------------
+# The camera gives ~30 targets per second; a separate thread glides the real cursor
+# towards the latest target at a higher rate, so motion looks continuous instead of
+# jumping several pixels every frame.
+CURSOR_ANIMATION_HZ = 144
+# Time constant of the glide (exponential approach), s. Higher = smoother, more lag.
+CURSOR_GLIDE_TAU_S = 0.025
+# Closer than this to the target (px) — snap and stop moving.
+CURSOR_SNAP_PX = 0.5
 # If the hand is lost for longer than this, the filter is reset so the cursor
 # does not glide in from a stale position.
 HAND_LOST_RESET_S = 0.3

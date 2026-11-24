@@ -56,3 +56,19 @@ def test_no_reset_during_continuous_tracking():
     m.update(0.0, 0.0, 0.0)
     x, y = m.update(1.0, 1.0, DT)
     assert x < W - 1 and y < H - 1  # smoothed, not jumped
+
+
+def test_glide_moves_part_of_the_way():
+    from gesture_control.mouse import glide_step
+
+    x, y = glide_step((0.0, 0.0), (100.0, 0.0), dt=0.01, tau=0.025)
+    assert 0.0 < x < 100.0 and y == 0.0
+
+
+def test_glide_converges_and_snaps():
+    from gesture_control.mouse import glide_step
+
+    p = (0.0, 0.0)
+    for _ in range(200):
+        p = glide_step(p, (100.0, 50.0), dt=1 / 144, tau=0.025)
+    assert p == (100.0, 50.0)

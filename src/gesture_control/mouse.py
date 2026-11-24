@@ -9,7 +9,10 @@ Check: ``python -m gesture_control.mouse`` moves the cursor around the screen ed
 from __future__ import annotations
 
 import ctypes
+import math
 import sys
+import threading
+import time
 from dataclasses import dataclass
 
 from gesture_control import config
@@ -111,6 +114,82 @@ class CursorMapper:
         return out
 
 
+def glide_step(
+    current: tuple[float, float], target: tuple[float, float], dt: float,
+    tau: float = config.CURSOR_GLIDE_TAU_S, snap: float = config.CURSOR_SNAP_PX,
+) -> tuple[float, float]:
+    """One step of exponential approach from ``current`` to ``target``."""
+    dx, dy = target[0] - current[0], target[1] - current[1]
+    if (dx * dx + dy * dy) ** 0.5 <= snap:
+        return target
+    k = 1.0 - math.exp(-dt / tau)
+    return current[0] + dx * k, current[1] + dy * k
+
+
+class CursorAnimator:
+    """Background thread that glides the cursor to the latest target at a high rate."""
+
+    def __init__(self, mouse: "Mouse", rate_hz: float = config.CURSOR_ANIMATION_HZ) -> None:
+        self._mouse = mouse
+        self._period = 1.0 / rate_hz
+        self._lock = threading.Lock()
+        self._target: tuple[float, float] | None = None
+        self._current: tuple[float, float] | None = None
+        self._running = False
+        self._thread: threading.Thread | None = None
+
+    def set_target(self, x: float, y: float) -> None:
+        with self._lock:
+            if self._target is None:
+                # (re)start gliding from wherever the cursor really is now
+                self._current = tuple(map(float, self._mouse.position))
+            self._target = (x, y)
+
+    def jump_to(self, x: float, y: float) -> None:
+        """Moves immediately, without gliding (used right before clicks)."""
+        with self._lock:
+            self._target = self._current = (float(x), float(y))
+        self._mouse.move_to(round(x), round(y))
+
+    def stop_moving(self) -> None:
+        """Forgets the target so the physical mouse is not fought with."""
+        with self._lock:
+            self._target = None
+
+    def start(self) -> "CursorAnimator":
+        self._running = True
+        self._thread = threading.Thread(target=self._loop, name="cursor", daemon=True)
+        self._thread.start()
+        return self
+
+    def stop(self) -> None:
+        self._running = False
+        if self._thread is not None:
+            self._thread.join()
+            self._thread = None
+
+    def __enter__(self) -> "CursorAnimator":
+        return self.start()
+
+    def __exit__(self, *exc) -> None:
+        self.stop()
+
+    def _loop(self) -> None:
+        last = time.perf_counter()
+        while self._running:
+            time.sleep(self._period)
+            now = time.perf_counter()
+            dt, last = now - last, now
+            with self._lock:
+                if self._target is None or self._current is None:
+                    continue
+                if self._current == self._target:
+                    continue
+                self._current = glide_step(self._current, self._target, dt)
+                x, y = self._current
+            self._mouse.move_to(round(x), round(y))
+
+
 # -- Output ---------------------------------------------------------------------
 class Mouse:
     """Sends cursor events to Windows via pynput."""
@@ -129,8 +208,6 @@ class Mouse:
 
 
 def _demo() -> None:
-    import time
-
     enable_dpi_awareness()
     w, h = screen_size()
     mouse = Mouse()

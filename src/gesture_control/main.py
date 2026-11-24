@@ -15,7 +15,9 @@ import numpy as np
 from gesture_control import config
 from gesture_control.camera import Camera, FpsCounter
 from gesture_control.controller import ControlState, HotkeyListener
-from gesture_control.mouse import CursorMapper, Mouse, WorkZone, enable_dpi_awareness, screen_size
+from gesture_control.mouse import (
+    CursorAnimator, CursorMapper, Mouse, WorkZone, enable_dpi_awareness, screen_size,
+)
 from gesture_control.tracker import Hand, HandTracker, draw_hand
 
 
@@ -57,15 +59,15 @@ def run() -> None:
     width, height = screen_size()
     zone = WorkZone()
     mapper = CursorMapper(width, height, zone)
-    mouse = Mouse()
+    animator = CursorAnimator(Mouse())
     state = ControlState()
     state.subscribe(lambda on: print("Control", "enabled" if on else "disabled"))
     # Re-enabling must not glide the cursor in from where it was disabled.
-    state.subscribe(lambda on: mapper.reset() if on else None)
+    state.subscribe(lambda on: mapper.reset() if on else animator.stop_moving())
     fps = FpsCounter()
 
     print(f"Screen {width}x{height}. {config.HOTKEY_TOGGLE} toggles control, q/Esc quits.")
-    with Camera() as cam, HandTracker() as tracker, HotkeyListener(state):
+    with Camera() as cam, HandTracker() as tracker, HotkeyListener(state), animator:
         while cam.is_running:
             item = cam.read(timeout=1.0)
             if item is None:
@@ -78,7 +80,7 @@ def run() -> None:
                 x, y = hand.point(config.CURSOR_LANDMARK)
                 pos = mapper.update(x, y, ts)
                 if pos is not None:
-                    mouse.move_to(*pos)
+                    animator.set_target(*pos)
 
             current_fps = fps.tick()
             if config.SHOW_PREVIEW:
