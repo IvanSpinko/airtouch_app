@@ -89,27 +89,27 @@ screen point.
 | Action         | Gesture                                                      |
 |----------------|--------------------------------------------------------------|
 | Move cursor    | point with the index finger                                  |
-| Left click     | quick pinch: thumb + **middle** finger                       |
-| Double click   | two quick thumb + middle pinches                             |
-| Drag           | thumb + middle pinch, hold ~0.3 s, then move; open to drop   |
-| Right click    | pinch: thumb + index finger                                  |
+| Left click     | quick pinch: thumb + **index** finger                        |
+| Double click   | two quick thumb + index pinches                              |
+| Drag           | thumb + index pinch, hold ~0.3 s, then move; open to drop    |
+| Right click    | pinch: thumb + **middle** finger                             |
 | Scroll         | index + middle **held together**, thumb tucked, ring + pinky folded; then hold the hand above / below that spot (auto scroll) |
 | Pause / resume | hold a fist for ~1 s                                         |
 
 ## Stage 2 — how to verify
 
 1. `python -m gesture_control.main`; the preview shows the recognized `Gesture:`.
-2. **Click / open a file:** point at a file in Explorer, make two quick thumb + middle
-   pinches — it opens. The index finger stays still, so the cursor does not move.
-3. **Drag a window:** point at a window title bar, thumb + middle pinch, move the hand, open.
+2. **Click / open a file:** point at a file in Explorer, make two quick thumb + index
+   pinches — it opens. The cursor follows the index knuckle, so pinching does not move it.
+3. **Drag a window:** point at a window title bar, thumb + index pinch, hold, move the hand, open.
 4. **Scroll:** open a long web page, show two fingers held together, then raise the hand a
    little and hold it — the page keeps scrolling (orange line in the preview = start point);
    further from the line = faster; open the fingers to stop.
-5. **Right click:** thumb + index pinch on the desktop opens the context menu.
+5. **Right click:** thumb + middle pinch on the desktop opens the context menu.
 6. **Pause:** hold a fist ~1 s — status turns `PAUSED`, nothing reacts; hold a fist again to resume.
 
-Ready-to-click pose: index points, middle and thumb stick out ready to pinch, ring and
-pinky folded. This is deliberately *not* scroll — scroll needs index and middle together.
+A hand getting ready to pinch is deliberately *not* scroll — scroll needs index and middle
+together with the thumb tucked away from both.
 
 If a gesture is not recognized, run `python -m gesture_control.gestures` and look at the
 `pi` / `pm` pinch distances and the index-middle `gap`, then tune in `config.py`:
@@ -154,9 +154,9 @@ The goal is **500+ samples per gesture** (the counter turns green).
 | Key | Gesture        | How to record it                                                   |
 |-----|----------------|--------------------------------------------------------------------|
 | 1   | `none`         | relaxed hand, transitions, half-open poses — anything else         |
-| 2   | `point`        | index finger out, others folded (also your "ready to click" pose)  |
+| 2   | `point`        | index finger out, others folded, also "about to pinch" poses       |
 | 3   | `pinch_index`  | thumb touching index fingertip                                     |
-| 4   | `pinch_middle` | thumb touching middle fingertip, index pointing                    |
+| 4   | `pinch_middle` | thumb touching middle fingertip                                    |
 | 5   | `two_fingers`  | index + middle together, thumb tucked                              |
 | 6   | `fist`         | closed fist                                                        |
 | 7   | `open_palm`    | all fingers spread                                                 |
