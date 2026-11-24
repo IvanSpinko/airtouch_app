@@ -154,7 +154,9 @@ The goal is **500+ samples per gesture** (the counter turns green).
 | Key | Gesture        | How to record it                                                   |
 |-----|----------------|--------------------------------------------------------------------|
 | 1   | `none`         | relaxed hand, transitions, half-open poses — anything else         |
-| 2   | `point`        | index finger out, others folded, also "about to pinch" poses       |
+| 2   | `point`        | index finger out, others folded. **Also record "almost pinch":**   |
+|     |                | thumb close to the index finger but not touching, slowly closing   |
+|     |                | and opening — otherwise the model clicks on a slight squeeze       |
 | 3   | `pinch_index`  | thumb touching index fingertip — record both with the other fingers |
 |     |                | **curled into a fist** and with them **spread out** ("OK" sign)    |
 | 4   | `pinch_middle` | thumb touching middle fingertip                                    |
