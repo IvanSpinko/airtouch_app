@@ -72,6 +72,15 @@ class Hand:
     def point(self, index: int) -> tuple[float, float]:
         return float(self.landmarks[index, 0]), float(self.landmarks[index, 1])
 
+    def cursor_point(
+        self, weights: dict[int, float] = config.CURSOR_POINT_WEIGHTS
+    ) -> tuple[float, float]:
+        """Weighted mean of landmarks the cursor follows (see CURSOR_POINT_WEIGHTS)."""
+        total = sum(weights.values())
+        x = sum(self.landmarks[i, 0] * w for i, w in weights.items()) / total
+        y = sum(self.landmarks[i, 1] * w for i, w in weights.items()) / total
+        return float(x), float(y)
+
 
 def ensure_model(
     path: Path = config.HAND_MODEL_PATH, url: str = config.HAND_MODEL_URL

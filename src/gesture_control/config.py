@@ -145,8 +145,12 @@ FIST_HOLD_S = 0.8
 # Without a hand for this long, any held button is released.
 HAND_LOST_RELEASE_S = 0.5
 
-# Landmark the cursor follows.
-CURSOR_LANDMARK = LM_INDEX_TIP
+# Point the cursor follows: weighted mean of landmarks {index: weight}.
+# The base knuckle of the index finger moves with the hand but not with finger
+# bending, so pinching and finger jitter do not shift the cursor. For the old
+# fingertip behaviour use {LM_INDEX_TIP: 1.0}; a blend like
+# {LM_INDEX_MCP: 0.7, LM_INDEX_TIP: 0.3} trades some stability for finer control.
+CURSOR_POINT_WEIGHTS = {LM_INDEX_MCP: 1.0}
 
 # --- Work zone ----------------------------------------------------------------
 # Rectangle in normalized frame coordinates (0..1) that is stretched over the whole

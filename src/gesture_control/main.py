@@ -1,6 +1,6 @@
 """Entry point: camera -> hand tracking -> gestures -> mouse.
 
-The cursor follows the index fingertip inside the work zone; pinches click and drag,
+The cursor follows the base of the index finger; pinches click and drag,
 two fingers scroll, a held fist pauses. Ctrl+Alt+G instantly disables/enables control.
 Press q or Esc in the preview window (or Ctrl+C in the console) to quit.
 
@@ -69,7 +69,7 @@ def draw_preview(
                  config.PREVIEW_LINE_THICKNESS)
     if hand is not None:
         draw_hand(out, hand)
-        x, y = hand.point(config.CURSOR_LANDMARK)
+        x, y = hand.cursor_point()
         cv2.circle(
             out, (int(x * w), int(y * h)), config.PREVIEW_CURSOR_RADIUS,
             config.COLOR_CURSOR_POINT, cv2.FILLED,
@@ -123,7 +123,7 @@ def run() -> None:
                         # Re-enabling must not glide the cursor in from a stale spot.
                         mapper.reset()
                     gesture = detector.update(hand.landmarks if hand else None)
-                    point = hand.point(config.CURSOR_LANDMARK) if hand else None
+                    point = hand.cursor_point() if hand else None
                     ctl.update(gesture, point, ts)
                 elif was_enabled:
                     ctl.release_all()
