@@ -22,10 +22,23 @@ def feed(detector, hand, frames):
     return g
 
 
+STABLE = max(config.POSE_STABLE_FRAMES, config.SCROLL_STABLE_FRAMES)
+
+
+def click_ready_hand():
+    """User's pose before a left click: ring + pinky folded, index pointing, middle
+    spread out towards the thumb which is ready to pinch it."""
+    hand = make_hand(("index", "middle"))
+    for k, (x, y) in zip((10, 11, 12), ((0.53, 0.64), (0.55, 0.60), (0.57, 0.57))):
+        hand[k, :2] = (x / config.FRAME_ASPECT, y)
+    hand[4, :2] = (0.45 / config.FRAME_ASPECT, 0.66)
+    return hand
+
+
 @pytest.mark.parametrize("name", POSES)
 def test_each_pose_is_recognized(name):
     hand, expected = POSES[name]
-    assert feed(GestureDetector(), hand, config.POSE_STABLE_FRAMES) == expected
+    assert feed(GestureDetector(), hand, STABLE) == expected
 
 
 @pytest.mark.parametrize("scale", [0.6, 1.0, 1.5])
@@ -42,7 +55,7 @@ def test_mirrored_hand_gives_same_gesture():
     for hand, expected in POSES.values():
         mirrored = hand.copy()
         mirrored[:, 0] = 1.0 - mirrored[:, 0]
-        assert feed(GestureDetector(), mirrored, config.POSE_STABLE_FRAMES) == expected
+        assert feed(GestureDetector(), mirrored, STABLE) == expected
 
 
 def test_pinch_needs_confirmation_frames():
@@ -128,3 +141,35 @@ def test_fist_requires_fingertips_near_palm():
     assert near.is_fist
     assert not far.is_fist
     assert classify_pose(far) != Gesture.FIST
+
+
+def test_click_ready_pose_is_not_scroll():
+    hand = click_ready_hand()
+    f = compute_features(hand)
+    assert f.extended["index"] and f.extended["middle"]
+    assert not f.extended["ring"] and not f.extended["pinky"]
+    assert f.pinch_middle > config.PINCH_ON_RATIO  # not pinched yet
+    assert feed(GestureDetector(), hand, 20) == Gesture.POINT
+
+
+def test_click_ready_then_pinch_never_scrolls():
+    d = GestureDetector()
+    seen = [d.update(click_ready_hand()) for _ in range(10)]
+    seen += [d.update(POSES["pinch_middle"][0]) for _ in range(5)]
+    assert Gesture.TWO_FINGERS not in seen
+    assert seen[-1] == Gesture.PINCH_MIDDLE
+
+
+def test_spread_fingers_are_not_scroll():
+    hand = make_hand(("index", "middle"))
+    hand[12, 0] += 0.15 / config.FRAME_ASPECT  # V-sign: middle tip far from index tip
+    assert compute_features(hand).index_middle_gap > config.SCROLL_FINGERS_TOGETHER_RATIO
+    assert feed(GestureDetector(), hand, 20) != Gesture.TWO_FINGERS
+
+
+def test_scroll_needs_longer_confirmation_than_other_poses():
+    d = GestureDetector()
+    two = POSES["two"][0]
+    seen = [d.update(two) for _ in range(config.SCROLL_STABLE_FRAMES)]
+    assert Gesture.TWO_FINGERS not in seen[:-1]
+    assert seen[-1] == Gesture.TWO_FINGERS
