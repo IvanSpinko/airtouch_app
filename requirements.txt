@@ -1,0 +1,8 @@
+# Runtime
+opencv-python>=4.10
+mediapipe>=0.10.30
+numpy>=1.26
+pynput>=1.7
+
+# Dev / tests
+pytest>=8
