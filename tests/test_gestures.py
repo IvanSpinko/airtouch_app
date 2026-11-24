@@ -15,6 +15,13 @@ POSES = {
 }
 
 
+def ready_detector():
+    """Detector that has already been tracking a hand (past the acquisition grace)."""
+    d = GestureDetector()
+    feed(d, make_hand(("index",)), config.ACQUIRE_GRACE_FRAMES + 1)
+    return d
+
+
 def feed(detector, hand, frames):
     g = None
     for _ in range(frames):
@@ -38,7 +45,7 @@ def click_ready_hand():
 @pytest.mark.parametrize("name", POSES)
 def test_each_pose_is_recognized(name):
     hand, expected = POSES[name]
-    assert feed(GestureDetector(), hand, STABLE) == expected
+    assert feed(ready_detector(), hand, STABLE) == expected
 
 
 @pytest.mark.parametrize("scale", [0.6, 1.0, 1.5])
@@ -55,11 +62,11 @@ def test_mirrored_hand_gives_same_gesture():
     for hand, expected in POSES.values():
         mirrored = hand.copy()
         mirrored[:, 0] = 1.0 - mirrored[:, 0]
-        assert feed(GestureDetector(), mirrored, STABLE) == expected
+        assert feed(ready_detector(), mirrored, STABLE) == expected
 
 
 def test_pinch_needs_confirmation_frames():
-    d = GestureDetector()
+    d = ready_detector()
     feed(d, POSES["point"][0], config.POSE_STABLE_FRAMES)
     pinch = POSES["pinch_index"][0]
     results = [d.update(pinch) for _ in range(config.PINCH_CONFIRM_FRAMES)]
@@ -68,7 +75,7 @@ def test_pinch_needs_confirmation_frames():
 
 
 def test_single_glitch_frame_is_not_a_click():
-    d = GestureDetector()
+    d = ready_detector()
     point, pinch = POSES["point"][0], POSES["pinch_index"][0]
     feed(d, point, 5)
     d.update(pinch)
@@ -76,7 +83,7 @@ def test_single_glitch_frame_is_not_a_click():
 
 
 def test_pinch_hysteresis_holds_between_thresholds():
-    d = GestureDetector()
+    d = ready_detector()
     feed(d, POSES["pinch_index"][0], config.PINCH_CONFIRM_FRAMES)
     # open the pinch to a distance between ON and OFF: still pinched
     mid = (config.PINCH_ON_RATIO + config.PINCH_OFF_RATIO) / 2
@@ -86,12 +93,12 @@ def test_pinch_hysteresis_holds_between_thresholds():
     hand_mid = make_hand(("index",), thumb_tip=tuple(tip + (mid * palm, 0.0)))
     assert compute_features(hand_mid).pinch_index == pytest.approx(mid, rel=1e-3)
     assert d.update(hand_mid) == Gesture.PINCH_INDEX
-    # fully open: released
-    assert d.update(hand) != Gesture.PINCH_INDEX
+    # fully open: released after the debounce
+    assert feed(d, hand, config.PINCH_RELEASE_FRAMES) != Gesture.PINCH_INDEX
 
 
 def test_fist_never_triggers_pinch():
-    d = GestureDetector()
+    d = ready_detector()
     fist = POSES["fist"][0]
     assert compute_features(fist).pinch_index < config.PINCH_ON_RATIO  # thumb is near
     results = [d.update(fist) for _ in range(10)]
@@ -100,7 +107,7 @@ def test_fist_never_triggers_pinch():
 
 
 def test_short_hand_loss_keeps_gesture():
-    d = GestureDetector()
+    d = ready_detector()
     feed(d, POSES["pinch_index"][0], 3)
     for _ in range(config.HAND_LOST_GRACE_FRAMES):
         assert d.update(None) == Gesture.PINCH_INDEX
@@ -108,7 +115,7 @@ def test_short_hand_loss_keeps_gesture():
 
 
 def test_long_hand_loss_resets():
-    d = GestureDetector()
+    d = ready_detector()
     feed(d, POSES["pinch_index"][0], 3)
     assert feed(d, None, config.HAND_LOST_GRACE_FRAMES + 1) == Gesture.NONE
     assert d.update(POSES["pinch_index"][0]) != Gesture.PINCH_INDEX  # needs confirmation again
@@ -129,7 +136,7 @@ def test_finger_pointed_at_camera_is_not_a_fist():
     f = compute_features(hand)
     assert f.extended["index"]
     assert not f.is_fist
-    assert feed(GestureDetector(), hand, config.POSE_STABLE_FRAMES) != Gesture.FIST
+    assert feed(ready_detector(), hand, config.POSE_STABLE_FRAMES) != Gesture.FIST
 
 
 def test_fist_requires_fingertips_near_palm():
@@ -149,11 +156,11 @@ def test_click_ready_pose_is_not_scroll():
     assert f.extended["index"] and f.extended["middle"]
     assert not f.extended["ring"] and not f.extended["pinky"]
     assert f.pinch_middle > config.PINCH_ON_RATIO  # not pinched yet
-    assert feed(GestureDetector(), hand, 20) == Gesture.POINT
+    assert feed(ready_detector(), hand, 20) == Gesture.POINT
 
 
 def test_click_ready_then_pinch_never_scrolls():
-    d = GestureDetector()
+    d = ready_detector()
     seen = [d.update(click_ready_hand()) for _ in range(10)]
     seen += [d.update(POSES["pinch_middle"][0]) for _ in range(5)]
     assert Gesture.TWO_FINGERS not in seen
@@ -164,12 +171,36 @@ def test_spread_fingers_are_not_scroll():
     hand = make_hand(("index", "middle"))
     hand[12, 0] += 0.15 / config.FRAME_ASPECT  # V-sign: middle tip far from index tip
     assert compute_features(hand).index_middle_gap > config.SCROLL_FINGERS_TOGETHER_RATIO
-    assert feed(GestureDetector(), hand, 20) != Gesture.TWO_FINGERS
+    assert feed(ready_detector(), hand, 20) != Gesture.TWO_FINGERS
 
 
 def test_scroll_needs_longer_confirmation_than_other_poses():
-    d = GestureDetector()
+    d = ready_detector()
     two = POSES["two"][0]
     seen = [d.update(two) for _ in range(config.SCROLL_STABLE_FRAMES)]
     assert Gesture.TWO_FINGERS not in seen[:-1]
     assert seen[-1] == Gesture.TWO_FINGERS
+
+
+
+def test_no_click_right_after_hand_appears():
+    d = GestureDetector()
+    pinch = POSES["pinch_middle"][0]
+    seen = [d.update(pinch) for _ in range(config.ACQUIRE_GRACE_FRAMES)]
+    assert Gesture.PINCH_MIDDLE not in seen
+
+
+def test_pinch_flicker_does_not_release():
+    d = ready_detector()
+    pinch, open_ = POSES["pinch_middle"][0], POSES["point"][0]
+    feed(d, pinch, config.PINCH_CONFIRM_FRAMES)
+    for _ in range(5):  # one open frame every other frame
+        assert d.update(open_) == Gesture.PINCH_MIDDLE
+        assert d.update(pinch) == Gesture.PINCH_MIDDLE
+
+
+def test_pinch_releases_after_debounce():
+    d = ready_detector()
+    feed(d, POSES["pinch_middle"][0], config.PINCH_CONFIRM_FRAMES)
+    results = [d.update(POSES["point"][0]) for _ in range(config.PINCH_RELEASE_FRAMES)]
+    assert results[-1] != Gesture.PINCH_MIDDLE
