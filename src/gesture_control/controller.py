@@ -72,10 +72,14 @@ class GestureController:
     """Turns recognized gestures into mouse actions.
 
     - POINT / NONE / OPEN_PALM: the cursor follows the index fingertip.
-    - PINCH_INDEX: left button down at the pre-pinch position; moving the hand past
+    Which pinch is the left / right button is set in config (``LEFT_BUTTON_GESTURE``,
+    ``RIGHT_BUTTON_GESTURE``); by default thumb + middle is left, so the index finger
+    that steers the cursor stays still while clicking.
+
+    - left pinch: button down at the pre-pinch position; moving the hand past
       ``DRAG_START_PX`` drags; opening the pinch releases. Two quick pinches land in
       the same spot, which Windows turns into a double click.
-    - PINCH_MIDDLE: right click; the cursor stays put while pinched.
+    - right pinch: right click; the cursor stays put while pinched.
     - TWO_FINGERS: cursor frozen, vertical hand movement scrolls.
     - FIST held for ``FIST_HOLD_S``: toggles pause.
 
@@ -88,6 +92,8 @@ class GestureController:
         self.cursor = cursor
         self.buttons = buttons
         self.paused = False
+        self.left_gesture = Gesture(config.LEFT_BUTTON_GESTURE)
+        self.right_gesture = Gesture(config.RIGHT_BUTTON_GESTURE)
         self._gesture = Gesture.NONE
         self._history: deque[tuple[float, tuple[int, int]]] = deque()
         self._target: tuple[int, int] | None = None
@@ -174,13 +180,13 @@ class GestureController:
         return anchor
 
     def _enter(self, gesture: Gesture, raw: tuple[float, float], y: float, t: float) -> None:
-        if gesture in (Gesture.PINCH_INDEX, Gesture.PINCH_MIDDLE):
+        if gesture in (self.left_gesture, self.right_gesture):
             # Repeated pinch during the settle window reuses the same spot (double click).
             if t >= self._settle_until:
                 ax, ay = self._anchor(t)
                 self.cursor.jump_to(ax, ay)
             self._pinch_anchor = raw
-            if gesture is Gesture.PINCH_INDEX:
+            if gesture is self.left_gesture:
                 self.buttons.press("left")
                 self._left_down = True
                 self._dragging = False
@@ -191,13 +197,13 @@ class GestureController:
             self._scroll_ref_y = y
 
     def _exit(self, gesture: Gesture, t: float) -> None:
-        if gesture is Gesture.PINCH_INDEX and self._left_down:
+        if gesture is self.left_gesture and self._left_down:
             self.buttons.release("left")
             self._left_down = False
             if not self._dragging:
                 self._settle_until = t + config.CLICK_SETTLE_S
             self._dragging = False
-        elif gesture is Gesture.PINCH_MIDDLE:
+        elif gesture is self.right_gesture:
             self._settle_until = t + config.CLICK_SETTLE_S
 
     def _moved_from_anchor(self, raw: tuple[float, float]) -> bool:
@@ -205,12 +211,12 @@ class GestureController:
         return math.hypot(dx, dy) > config.DRAG_START_PX
 
     def _hold(self, gesture: Gesture, raw: tuple[float, float], y: float, t: float) -> None:
-        if gesture is Gesture.PINCH_INDEX:
+        if gesture is self.left_gesture:
             if not self._dragging and self._moved_from_anchor(raw):
                 self._dragging = True
             if self._dragging:
                 self.cursor.set_target(*self._target)
-        elif gesture is Gesture.PINCH_MIDDLE:
+        elif gesture is self.right_gesture:
             pass  # frozen
         elif gesture is Gesture.TWO_FINGERS:
             dy = self._scroll_ref_y - y  # hand up -> positive

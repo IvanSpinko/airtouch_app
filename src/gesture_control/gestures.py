@@ -22,8 +22,8 @@ from gesture_control import config
 class Gesture(str, Enum):
     NONE = "none"
     POINT = "point"                # index finger extended — move the cursor
-    PINCH_INDEX = "pinch_index"    # thumb + index — left button
-    PINCH_MIDDLE = "pinch_middle"  # thumb + middle — right click
+    PINCH_INDEX = "pinch_index"    # thumb + index (right button by default)
+    PINCH_MIDDLE = "pinch_middle"  # thumb + middle (left button by default)
     TWO_FINGERS = "two_fingers"    # index + middle extended — scroll
     FIST = "fist"                  # pause
     OPEN_PALM = "open_palm"        # reserved for the on-screen keyboard (stage 4)

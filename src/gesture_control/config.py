@@ -89,6 +89,11 @@ POSE_STABLE_FRAMES = 3
 HAND_LOST_GRACE_FRAMES = 5
 
 # --- Mouse actions ------------------------------------------------------------
+# Which pinch acts as which mouse button ("pinch_index" or "pinch_middle").
+# Thumb + middle for the left button keeps the index finger — and so the cursor —
+# still while clicking.
+LEFT_BUTTON_GESTURE = "pinch_middle"
+RIGHT_BUTTON_GESTURE = "pinch_index"
 # Closing the pinch drags the fingertip; the click lands where the cursor was this
 # long before the pinch was recognized.
 CLICK_LOOKBACK_S = 0.15
