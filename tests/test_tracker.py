@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 from handgen import make_hand
 
 from gesture_control import config
@@ -27,3 +28,19 @@ def test_margin_is_respected():
     h = Hand(lm, "Left", 1.0)
     assert near_edges(h, margin=0.05) == {"left"}
     assert near_edges(h, margin=0.02) == set()
+
+
+def test_cursor_point_weighted_mean():
+    lm = np.zeros((config.NUM_LANDMARKS, 3), dtype=np.float32)
+    lm[5, :2] = (0.2, 0.4)
+    lm[8, :2] = (0.6, 0.0)
+    h = Hand(lm, "Right", 1.0)
+    assert h.cursor_point({5: 1.0}) == pytest.approx((0.2, 0.4))
+    assert h.cursor_point({5: 1.0, 8: 1.0}) == pytest.approx((0.4, 0.2))
+
+
+def test_default_cursor_point_ignores_pinching_finger():
+    """Pinching thumb + middle bends fingers but must not move the cursor point."""
+    open_hand = Hand(make_hand(("index", "middle")), "Right", 1.0)
+    pinched = Hand(make_hand(("index",), thumb_tip="middle"), "Right", 1.0)
+    assert open_hand.cursor_point() == pytest.approx(pinched.cursor_point())
