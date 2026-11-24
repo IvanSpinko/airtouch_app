@@ -192,12 +192,16 @@ class CursorAnimator:
 
 # -- Output ---------------------------------------------------------------------
 class Mouse:
-    """Sends cursor events to Windows via pynput."""
+    """Sends cursor, button and wheel events to Windows via pynput.
+
+    Buttons are named "left" / "right" so callers do not depend on pynput.
+    """
 
     def __init__(self) -> None:
-        from pynput.mouse import Controller
+        from pynput.mouse import Button, Controller
 
         self._ctl = Controller()
+        self._buttons = {"left": Button.left, "right": Button.right}
 
     @property
     def position(self) -> tuple[int, int]:
@@ -205,6 +209,19 @@ class Mouse:
 
     def move_to(self, x: int, y: int) -> None:
         self._ctl.position = (x, y)
+
+    def press(self, button: str) -> None:
+        self._ctl.press(self._buttons[button])
+
+    def release(self, button: str) -> None:
+        self._ctl.release(self._buttons[button])
+
+    def click(self, button: str) -> None:
+        self._ctl.click(self._buttons[button])
+
+    def scroll(self, ticks: float) -> None:
+        """Vertical scroll; fractional ticks give smooth scrolling. Positive = up."""
+        self._ctl.scroll(0, ticks)
 
 
 def _demo() -> None:
