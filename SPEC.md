@@ -91,7 +91,7 @@ in keyboard mode it opens osk.exe, and typing is done with the same mouse.
 
 Each stage ends with a working version that can be demonstrated.
 
-- [ ] **1. Tracking and cursor.** Done when the cursor smoothly follows the finger, reaches all
+- [x] **1. Tracking and cursor.** Done when the cursor smoothly follows the finger, reaches all
   screen corners, and a hotkey instantly disables control.
 - [ ] **2. Clicks, drag, scroll.** Done when you can open a file, drag a window and scroll a page
   without a mouse.
