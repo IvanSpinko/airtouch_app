@@ -119,14 +119,26 @@ DRAG_MIN_HOLD_S = 0.3
 # After a click the cursor stays frozen this long (unless the hand moves more than
 # DRAG_START_PX), so two quick pinches land in one spot and make a double click.
 CLICK_SETTLE_S = 0.35
-# Scroll: wheel ticks per full frame height of hand movement. Fractional ticks are
-# sent for smooth scrolling once at least SCROLL_MIN_TICKS accumulate.
+# Scroll mode:
+# "auto": like pressing the mouse wheel — the spot where the two-finger pose starts
+#         is the anchor; moving the hand above / below it scrolls continuously, the
+#         further away the faster, until the fingers are opened. Default.
+# "drag": the page follows the hand movement (move up = scroll up, stop = stop).
+SCROLL_MODE = "auto"
+# Auto scroll: no scrolling within this distance of the anchor (fraction of frame height).
+SCROLL_AUTO_DEADZONE = 0.03
+# Auto scroll speed: wheel ticks per second per frame-height of offset beyond the dead zone.
+SCROLL_AUTO_SPEED = 80.0
+# Auto scroll speed limit, wheel ticks per second.
+SCROLL_AUTO_MAX_TICKS_S = 25.0
+# Drag scroll: wheel ticks per full frame height of hand movement.
 SCROLL_TICKS_PER_FRAME = 25.0
+# Fractional ticks are sent for smooth scrolling once at least this many accumulate.
 SCROLL_MIN_TICKS = 0.1
-# The hand must move this much (fraction of frame height) before scrolling starts,
+# Drag scroll: the hand must move this much (fraction of frame height) before scrolling starts,
 # so entering the pose does not nudge the page.
 SCROLL_START_RATIO = 0.02
-# True = moving the hand up scrolls down (like dragging the page).
+# True = reverses the scroll direction (hand up scrolls down) in both modes.
 SCROLL_INVERT = False
 # Holding a fist this long toggles pause.
 FIST_HOLD_S = 0.8

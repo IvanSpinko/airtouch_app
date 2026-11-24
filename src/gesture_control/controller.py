@@ -81,7 +81,8 @@ class GestureController:
       the same spot, which Windows turns into a double click. Dragging needs the
       pinch held for ``DRAG_MIN_HOLD_S``, so a quick pinch never selects anything.
     - right pinch: right click; the cursor stays put while pinched.
-    - TWO_FINGERS: cursor frozen, vertical hand movement scrolls.
+    - TWO_FINGERS: cursor frozen; scrolls by hand offset from where the pose started
+      (``SCROLL_MODE`` "auto", like a pressed mouse wheel) or by hand movement ("drag").
     - FIST held for ``FIST_HOLD_S``: toggles pause.
 
     OS output goes through ``cursor`` and ``buttons``, so the logic is testable
@@ -106,6 +107,8 @@ class GestureController:
         self._scrolling = False
         self._settle_until = 0.0
         self._scroll_ref_y = 0.0
+        self._scroll_last_t = 0.0
+        self._scroll_acc = 0.0
         self._fist_since: float | None = None
         self._fist_used = False
 
@@ -199,6 +202,8 @@ class GestureController:
         elif gesture is Gesture.TWO_FINGERS:
             self.cursor.stop_moving()
             self._scroll_ref_y = y
+            self._scroll_last_t = t
+            self._scroll_acc = 0.0
             self._scrolling = False
 
     def _exit(self, gesture: Gesture, t: float) -> None:
@@ -227,6 +232,9 @@ class GestureController:
         elif gesture is self.right_gesture:
             pass  # frozen
         elif gesture is Gesture.TWO_FINGERS:
+            if config.SCROLL_MODE == "auto":
+                self._auto_scroll(y, t)
+                return
             dy = self._scroll_ref_y - y  # hand up -> positive
             if not self._scrolling:
                 if abs(dy) < config.SCROLL_START_RATIO:
@@ -245,6 +253,30 @@ class GestureController:
                 return  # keep still after a click
             self._settle_until = 0.0
             self.cursor.set_target(*self._target)
+
+    @property
+    def scroll_anchor(self) -> float | None:
+        """Normalized y of the auto-scroll anchor while auto-scrolling, else None."""
+        if self._gesture is Gesture.TWO_FINGERS and config.SCROLL_MODE == "auto":
+            return self._scroll_ref_y
+        return None
+
+    def _auto_scroll(self, y: float, t: float) -> None:
+        dt, self._scroll_last_t = t - self._scroll_last_t, t
+        offset = self._scroll_ref_y - y  # hand above the anchor -> positive
+        excess = abs(offset) - config.SCROLL_AUTO_DEADZONE
+        if excess <= 0 or dt <= 0:
+            self._scrolling = False
+            return
+        self._scrolling = True
+        speed = min(excess * config.SCROLL_AUTO_SPEED, config.SCROLL_AUTO_MAX_TICKS_S)
+        ticks = math.copysign(speed * dt, offset)
+        if config.SCROLL_INVERT:
+            ticks = -ticks
+        self._scroll_acc += ticks
+        if abs(self._scroll_acc) >= config.SCROLL_MIN_TICKS:
+            self.buttons.scroll(self._scroll_acc)
+            self._scroll_acc = 0.0
 
 
 class HotkeyListener:
