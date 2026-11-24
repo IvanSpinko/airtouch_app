@@ -204,3 +204,42 @@ def test_pinch_releases_after_debounce():
     feed(d, POSES["pinch_middle"][0], config.PINCH_CONFIRM_FRAMES)
     results = [d.update(POSES["point"][0]) for _ in range(config.PINCH_RELEASE_FRAMES)]
     assert results[-1] != Gesture.PINCH_MIDDLE
+
+
+# -- normalization for the classifier ----------------------------------------------
+from gesture_control.gestures import normalize_landmarks  # noqa: E402
+
+
+def rotate(hand, deg):
+    a = np.deg2rad(deg)
+    out = hand.copy()
+    cx, cy = 0.5 * config.FRAME_ASPECT, 0.5
+    x = hand[:, 0] * config.FRAME_ASPECT - cx
+    y = hand[:, 1] - cy
+    out[:, 0] = (np.cos(a) * x - np.sin(a) * y + cx) / config.FRAME_ASPECT
+    out[:, 1] = np.sin(a) * x + np.cos(a) * y + cy
+    return out
+
+
+def test_normalize_is_invariant_to_position_size_rotation():
+    ref = normalize_landmarks(make_hand(("index", "middle")))
+    for hand in (
+        make_hand(("index", "middle"), offset=(0.1, -0.1)),
+        make_hand(("index", "middle"), scale=0.5),
+        rotate(make_hand(("index", "middle")), 30),
+    ):
+        assert np.allclose(normalize_landmarks(hand), ref, atol=1e-4)
+
+
+def test_normalize_maps_left_hand_onto_right():
+    right = make_hand(("index",), thumb_tip="middle")
+    left = right.copy()
+    left[:, 0] = 1.0 - left[:, 0]
+    assert np.allclose(normalize_landmarks(left, "Left"), normalize_landmarks(right, "Right"), atol=1e-5)
+
+
+def test_normalize_shape_and_anchor():
+    f = normalize_landmarks(make_hand(("index",))).reshape(-1, 3)
+    assert f.shape == (config.NUM_LANDMARKS, 3)
+    assert np.allclose(f[config.LM_WRIST], 0.0)
+    assert np.allclose(f[config.LM_MIDDLE_MCP, :2], (0.0, -1.0), atol=1e-5)
