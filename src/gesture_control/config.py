@@ -39,7 +39,7 @@ MIN_TRACKING_CONFIDENCE = 0.4
 NUM_LANDMARKS = 21
 # Hide MediaPipe / LiteRT native INFO logs on start-up and shutdown.
 SILENCE_NATIVE_LOGS = True
-# The first frames also print one-off native warnings; silence that many.
+# The first frames with a hand print one-off native warnings; silence until this many.
 SILENCED_WARMUP_FRAMES = 3
 
 # MediaPipe hand landmark indices.

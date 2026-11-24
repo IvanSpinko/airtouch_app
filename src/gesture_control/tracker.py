@@ -132,10 +132,13 @@ class HandTracker:
         # VIDEO mode requires strictly increasing timestamps.
         ts_ms = max(int(timestamp_s * 1000), self._last_ts_ms + 1)
         self._last_ts_ms = ts_ms
+        # The one-off native warnings appear when the landmark model first runs,
+        # i.e. on the first frames *with a hand*, which may be long after start-up.
         if self._frames < config.SILENCED_WARMUP_FRAMES:
-            self._frames += 1
             with native_stderr_silenced():
                 result = self._landmarker.detect_for_video(image, ts_ms)
+            if result.hand_landmarks:
+                self._frames += 1
         else:
             result = self._landmarker.detect_for_video(image, ts_ms)
         if not result.hand_landmarks:
