@@ -106,6 +106,7 @@ class GestureController:
         self._dragging = False
         self._pinch_anchor: tuple[float, float] = (0.0, 0.0)
         self._pinch_since = 0.0
+        self._right_fired = False
         self._scrolling = False
         self._settle_until = 0.0
         self._scroll_ref_y = 0.0
@@ -205,8 +206,7 @@ class GestureController:
                 self._dragging = False
                 self._event("LEFT DOWN", t)
             else:
-                self.buttons.click("right")
-                self._event("RIGHT CLICK", t)
+                self._right_fired = False  # fires in _hold after RIGHT_CLICK_MIN_HOLD_S
         elif gesture is Gesture.TWO_FINGERS:
             self.cursor.stop_moving()
             self._scroll_ref_y = y
@@ -222,7 +222,7 @@ class GestureController:
             if not self._dragging:
                 self._settle_until = t + config.CLICK_SETTLE_S
             self._dragging = False
-        elif gesture is self.right_gesture:
+        elif gesture is self.right_gesture and self._right_fired:
             self._settle_until = t + config.CLICK_SETTLE_S
 
     def _moved_from_anchor(self) -> bool:
@@ -233,14 +233,25 @@ class GestureController:
 
     def _hold(self, gesture: Gesture, y: float, t: float) -> None:
         if gesture is self.left_gesture:
+            if not self._left_down:
+                return  # auto-released below; wait for the fingers to open
             held = t - self._pinch_since >= config.DRAG_MIN_HOLD_S
             if not self._dragging and held and self._moved_from_anchor():
                 self._dragging = True
                 self._event("DRAG", t)
+            if not self._dragging and t - self._pinch_since >= config.LEFT_HOLD_STILL_MAX_S:
+                self.buttons.release("left")
+                self._left_down = False
+                self._event("AUTO RELEASE", t)
+                return
             if self._dragging:
                 self.cursor.set_target(*self._target)
         elif gesture is self.right_gesture:
-            pass  # frozen
+            # cursor stays frozen; click once the pinch has been held long enough
+            if not self._right_fired and t - self._pinch_since >= config.RIGHT_CLICK_MIN_HOLD_S:
+                self.buttons.click("right")
+                self._right_fired = True
+                self._event("RIGHT CLICK", t)
         elif gesture is Gesture.TWO_FINGERS:
             if config.SCROLL_MODE == "auto":
                 self._auto_scroll(y, t)
