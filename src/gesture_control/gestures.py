@@ -88,6 +88,64 @@ def compute_features(landmarks: np.ndarray, aspect: float = config.FRAME_ASPECT)
     )
 
 
+def normalize_landmarks(
+    landmarks: np.ndarray, handedness: str = "Right", aspect: float = config.FRAME_ASPECT
+) -> np.ndarray:
+    """Pose-only feature vector (63 floats) for the classifier.
+
+    Removes everything that is not the hand shape: position (wrist at the origin),
+    size (palm length = 1), in-plane rotation (wrist -> middle MCP points up) and
+    handedness (left hands are mirrored to look like right hands).
+    """
+    pts = np.asarray(landmarks, dtype=np.float64)[:, :3].copy()
+    pts[:, 0] *= aspect
+    pts[:, 2] *= aspect
+    pts -= pts[config.LM_WRIST]
+    if handedness == "Left":
+        pts[:, 0] = -pts[:, 0]
+    vx, vy = pts[config.LM_MIDDLE_MCP, 0], pts[config.LM_MIDDLE_MCP, 1]
+    palm = max(float(np.hypot(vx, vy)), 1e-6)
+    # rotate so that (vx, vy) maps to (0, -palm): fingers point "up" in image coords
+    angle = np.arctan2(vx, -vy)
+    cos, sin = np.cos(angle), np.sin(angle)
+    x, y = pts[:, 0].copy(), pts[:, 1].copy()
+    pts[:, 0] = cos * x + sin * y
+    pts[:, 1] = -sin * x + cos * y
+    pts /= palm
+    return pts.reshape(-1).astype(np.float32)
+
+
+class GestureClassifier:
+    """Runtime MLP inference in numpy (weights exported by ml/train.py).
+
+    numpy keeps the app light: no PyTorch needed to run it or in the .exe.
+    """
+
+    def __init__(self, path=config.GESTURE_MODEL_NPZ) -> None:
+        data = np.load(path, allow_pickle=False)
+        self.classes = [Gesture(c) for c in data["classes"]]
+        n = int(data["num_layers"])
+        self.layers = [(data[f"W{i}"], data[f"b{i}"]) for i in range(n)]
+
+    @classmethod
+    def load_if_available(cls, path=config.GESTURE_MODEL_NPZ) -> "GestureClassifier | None":
+        return cls(path) if config.USE_CLASSIFIER and path.exists() else None
+
+    def predict_proba(self, features: np.ndarray) -> np.ndarray:
+        h = np.asarray(features, dtype=np.float32)
+        for i, (w, b) in enumerate(self.layers):
+            h = h @ w.T + b
+            if i < len(self.layers) - 1:
+                h = np.maximum(h, 0.0)
+        h = h - h.max(axis=-1, keepdims=True)
+        e = np.exp(h)
+        return e / e.sum(axis=-1, keepdims=True)
+
+    def predict(self, landmarks: np.ndarray, handedness: str = "Right") -> dict[Gesture, float]:
+        probs = self.predict_proba(normalize_landmarks(landmarks, handedness))
+        return dict(zip(self.classes, map(float, probs)))
+
+
 def classify_pose(f: HandFeatures) -> Gesture:
     """Static pose from finger states (no pinch logic, no history)."""
     e = f.extended

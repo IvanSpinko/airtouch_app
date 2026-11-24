@@ -105,6 +105,47 @@ SCROLL_THUMB_AWAY_RATIO = 0.7
 # dropped frame does not end a drag.
 HAND_LOST_GRACE_FRAMES = 5
 
+# --- Gesture classifier (stage 3) -------------------------------------------
+# Order matters: it is the label index used by the trained model.
+GESTURE_CLASSES = (
+    "none", "point", "pinch_index", "pinch_middle", "two_fingers", "fist", "open_palm",
+)
+GESTURE_DATA_PATH = DATA_DIR / "gestures.csv"
+GESTURE_MODEL_PT = MODELS_DIR / "gesture.pt"      # PyTorch checkpoint (training)
+GESTURE_MODEL_NPZ = MODELS_DIR / "gesture.npz"    # numpy weights (runtime, no torch needed)
+GESTURE_TEST_SPLIT = MODELS_DIR / "test_split.npz"
+# Use the trained classifier at runtime when the model file exists.
+USE_CLASSIFIER = True
+# Static pose from the classifier is trusted only above this probability.
+CLASSIFIER_MIN_PROB = 0.6
+# A threshold pinch only clicks if the classifier gives that pinch at least this
+# probability (cuts accidental clicks from odd hand angles).
+CLASSIFIER_PINCH_MIN_PROB = 0.4
+
+# Recording (ml/record.py)
+RECORD_TARGET_PER_CLASS = 500
+RECORD_KEYS = {ord(str(i + 1)): name for i, name in enumerate(GESTURE_CLASSES)}
+RECORD_TOGGLE_KEY = ord(" ")
+RECORD_UNDO_KEY = ord("u")
+RECORD_UNDO_COUNT = 30
+
+# Training (ml/train.py)
+ML_SEED = 42
+ML_VAL_FRACTION = 0.15
+ML_TEST_FRACTION = 0.15
+ML_HIDDEN = (128, 64)
+ML_DROPOUT = 0.2
+ML_EPOCHS = 80
+ML_BATCH = 64
+ML_LR = 1e-3
+ML_WEIGHT_DECAY = 1e-4
+ML_PATIENCE = 15
+# Augmentation of normalized landmarks: random in-plane rotation (deg), scale, noise.
+ML_AUG_ROTATION_DEG = 15.0
+ML_AUG_SCALE = 0.1
+ML_AUG_NOISE = 0.02
+ML_TARGET_ACCURACY = 0.95
+
 # --- Mouse actions ------------------------------------------------------------
 # Which pinch acts as which mouse button ("pinch_index" or "pinch_middle").
 # Thumb + middle for the left button keeps the index finger — and so the cursor —
