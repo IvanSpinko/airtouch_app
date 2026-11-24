@@ -186,16 +186,19 @@ def pinch_strength(
 
     - no model: fingertip distance only;
     - with a model: the model's probability, or the distance strength if the model
-      at least half agrees (``gate``: fingertips touching from an odd angle can
-      look like a pinch to the rule but not to the model — no click then).
-      Holding an already started pinch uses ``gate=False``, so a drag survives a
-      momentary model wobble while the fingertips stay together.
+      at least half agrees (fingertips touching from an odd angle can look like a
+      pinch to the rule but not to the model — no click then).
+      Holding an already started pinch (``gate=False``) only needs the model to
+      give it CLASSIFIER_PINCH_HOLD_GATE, so a drag survives a model wobble while
+      the fingertips stay together — but a curled hand or fist, where fingertips
+      are close anyway, does not keep the button down.
     """
     rule = distance_strength(f.distance(pinch))
     if probs is None:
         return rule
     p = probs.get(pinch, 0.0)
-    if gate and p < config.CLASSIFIER_PINCH_MIN_PROB:
+    gate_prob = config.CLASSIFIER_PINCH_MIN_PROB if gate else config.CLASSIFIER_PINCH_HOLD_GATE
+    if p < gate_prob:
         rule = 0.0
     return max(p, rule)
 

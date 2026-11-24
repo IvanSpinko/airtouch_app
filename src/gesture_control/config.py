@@ -126,6 +126,9 @@ CLASSIFIER_MIN_PROB = 0.6
 # probability with fingertip distance. Fingertip distance only counts if the model
 # gives that pinch at least this probability.
 CLASSIFIER_PINCH_MIN_PROB = 0.4
+# While a button is held, fingertip distance keeps it down only if the model still
+# gives the pinch at least this much (a fist has fingertips close too).
+CLASSIFIER_PINCH_HOLD_GATE = 0.15
 
 # Recording (ml/record.py)
 RECORD_TARGET_PER_CLASS = 500
@@ -167,6 +170,12 @@ CURSOR_HISTORY_S = 1.0
 # A quick pinch is therefore always a clean click, never a tiny drag/selection.
 DRAG_START_PX = 60
 DRAG_MIN_HOLD_S = 0.3
+# Safety: a left button held this long without dragging is released (prevents a
+# stuck button from an accidental press).
+LEFT_HOLD_STILL_MAX_S = 2.0
+# Right click fires only after the right pinch is held this long, so a hand
+# passing through that pose does not open context menus.
+RIGHT_CLICK_MIN_HOLD_S = 0.15
 # After a click the cursor stays frozen this long (unless the hand moves more than
 # DRAG_START_PX), so two quick pinches land in one spot and make a double click.
 CLICK_SETTLE_S = 0.35
