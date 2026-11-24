@@ -122,6 +122,13 @@ CLASSIFIER_MIN_PROB = 0.6
 # A threshold pinch only clicks if the classifier gives that pinch at least this
 # probability (cuts accidental clicks from odd hand angles).
 CLASSIFIER_PINCH_MIN_PROB = 0.4
+# The model alone starts a pinch at this probability, even when the fingertip
+# distance rule does not fire (e.g. a pinch with the other fingers curled in,
+# where the thumb presses the side of the index finger).
+CLASSIFIER_PINCH_ON_PROB = 0.7
+# A started pinch is held while the model gives it at least this probability
+# (or the fingertips stay close), so model-only pinches can be dragged.
+CLASSIFIER_PINCH_HOLD_PROB = 0.4
 
 # Recording (ml/record.py)
 RECORD_TARGET_PER_CLASS = 500

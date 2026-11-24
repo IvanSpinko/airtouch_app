@@ -199,7 +199,11 @@ class GestureDetector:
     def _update_pinch(self, f: HandFeatures) -> Gesture | None:
         if self._pinch is not None:
             dist = f.pinch_index if self._pinch is Gesture.PINCH_INDEX else f.pinch_middle
-            if dist < config.PINCH_OFF_RATIO:
+            model_holds = (
+                self.probs is not None
+                and self.probs.get(self._pinch, 0.0) >= config.CLASSIFIER_PINCH_HOLD_PROB
+            )
+            if dist < config.PINCH_OFF_RATIO or model_holds:
                 self._release_frames = 0
                 return self._pinch
             # Release only after a few open frames, so a flicker mid-drag does not
@@ -219,6 +223,13 @@ class GestureDetector:
             )
             if self.probs is not None and self.probs.get(candidate, 0.0) < config.CLASSIFIER_PINCH_MIN_PROB:
                 candidate = None  # the model does not see a pinch here
+        if candidate is None and not acquiring and self.probs is not None:
+            # Pinches made with the other fingers curled in (thumb against the side of
+            # the index finger) keep the fingertip landmarks far apart, so the distance
+            # rule never fires — but the trained model recognizes them.
+            best = max(PINCHES, key=lambda g: self.probs.get(g, 0.0))
+            if self.probs.get(best, 0.0) >= config.CLASSIFIER_PINCH_ON_PROB:
+                candidate = best
         if candidate is None:
             self._pinch_frames = 0
             self._pinch_votes = {g: 0 for g in PINCHES}
