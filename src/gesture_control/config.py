@@ -75,6 +75,32 @@ FINGER_EXTENDED_RATIO = 1.15
 OPEN_PALM_THUMB_RATIO = 0.6
 # Static poses (fist, two fingers, palm, point) must be stable for this many frames.
 POSE_STABLE_FRAMES = 3
+# The detector keeps its state through this many frames without a hand, so a single
+# dropped frame does not end a drag.
+HAND_LOST_GRACE_FRAMES = 5
+
+# --- Mouse actions ------------------------------------------------------------
+# Closing the pinch drags the fingertip; the click lands where the cursor was this
+# long before the pinch was recognized.
+CLICK_LOOKBACK_S = 0.15
+# How much cursor history to keep for the lookback, s.
+CURSOR_HISTORY_S = 1.0
+# While pinched, the cursor stays put until the hand moves this far (px) —
+# then it becomes a drag.
+DRAG_START_PX = 40
+# After a click the cursor stays frozen this long (unless the hand moves more than
+# DRAG_START_PX), so two quick pinches land in one spot and make a double click.
+CLICK_SETTLE_S = 0.35
+# Scroll: wheel ticks per full frame height of hand movement. Fractional ticks are
+# sent for smooth scrolling once at least SCROLL_MIN_TICKS accumulate.
+SCROLL_TICKS_PER_FRAME = 25.0
+SCROLL_MIN_TICKS = 0.1
+# True = moving the hand up scrolls down (like dragging the page).
+SCROLL_INVERT = False
+# Holding a fist this long toggles pause.
+FIST_HOLD_S = 0.8
+# Without a hand for this long, any held button is released.
+HAND_LOST_RELEASE_S = 0.5
 
 # Landmark the cursor follows.
 CURSOR_LANDMARK = LM_INDEX_TIP

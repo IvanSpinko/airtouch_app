@@ -1,20 +1,23 @@
 """Controller: decides what to do with the tracked hand.
 
-Stage 1 only has two states — control enabled or disabled. Mouse/keyboard/pause
-modes driven by gestures are added in later stages.
-
-The enabled flag is flipped from the hotkey thread and read from the main loop,
-so it is guarded by a lock.
+- ``ControlState`` — global on/off switch flipped by the Ctrl+Alt+G hotkey (from the
+  hotkey thread, so it is guarded by a lock).
+- ``GestureController`` — state machine that turns gestures into clicks, drags and
+  scrolling.
 
 Check: ``python -m gesture_control.controller`` prints state changes on Ctrl+Alt+G.
 """
 
 from __future__ import annotations
 
+import math
 import threading
-from typing import Callable
+from collections import deque
+from typing import Callable, Protocol
 
 from gesture_control import config
+from gesture_control.gestures import Gesture
+from gesture_control.mouse import CursorMapper
 
 Listener = Callable[[bool], None]
 
@@ -50,6 +53,178 @@ class ControlState:
         for listener in self._listeners:
             listener(value)
         return value
+
+
+class CursorSink(Protocol):
+    def set_target(self, x: float, y: float) -> None: ...
+    def jump_to(self, x: float, y: float) -> None: ...
+    def stop_moving(self) -> None: ...
+
+
+class ButtonSink(Protocol):
+    def press(self, button: str) -> None: ...
+    def release(self, button: str) -> None: ...
+    def click(self, button: str) -> None: ...
+    def scroll(self, ticks: float) -> None: ...
+
+
+class GestureController:
+    """Turns recognized gestures into mouse actions.
+
+    - POINT / NONE / OPEN_PALM: the cursor follows the index fingertip.
+    - PINCH_INDEX: left button down at the pre-pinch position; moving the hand past
+      ``DRAG_START_PX`` drags; opening the pinch releases. Two quick pinches land in
+      the same spot, which Windows turns into a double click.
+    - PINCH_MIDDLE: right click; the cursor stays put while pinched.
+    - TWO_FINGERS: cursor frozen, vertical hand movement scrolls.
+    - FIST held for ``FIST_HOLD_S``: toggles pause.
+
+    OS output goes through ``cursor`` and ``buttons``, so the logic is testable
+    without touching the real mouse.
+    """
+
+    def __init__(self, mapper: CursorMapper, cursor: CursorSink, buttons: ButtonSink) -> None:
+        self.mapper = mapper
+        self.cursor = cursor
+        self.buttons = buttons
+        self.paused = False
+        self._gesture = Gesture.NONE
+        self._history: deque[tuple[float, tuple[int, int]]] = deque()
+        self._target: tuple[int, int] | None = None
+        self._last_seen: float | None = None
+        self._left_down = False
+        self._dragging = False
+        self._pinch_anchor: tuple[float, float] = (0.0, 0.0)
+        self._settle_until = 0.0
+        self._scroll_ref_y = 0.0
+        self._fist_since: float | None = None
+        self._fist_used = False
+
+    @property
+    def gesture(self) -> Gesture:
+        return self._gesture
+
+    @property
+    def dragging(self) -> bool:
+        return self._dragging
+
+    # -- public API -------------------------------------------------------------
+    def release_all(self) -> None:
+        """Releases held buttons and stops cursor motion (on disable, quit, lost hand)."""
+        if self._left_down:
+            self.buttons.release("left")
+        self._left_down = False
+        self._dragging = False
+        self._gesture = Gesture.NONE
+        self.cursor.stop_moving()
+
+    def update(self, gesture: Gesture, point: tuple[float, float] | None, t: float) -> None:
+        """Processes one frame. ``point`` is the normalized cursor landmark or None."""
+        if point is None:
+            if self._last_seen is not None and t - self._last_seen > config.HAND_LOST_RELEASE_S:
+                if self._left_down or self._gesture is not Gesture.NONE:
+                    self.release_all()
+            return
+        self._last_seen = t
+
+        self._update_pause(gesture, t)
+        if self.paused or gesture is Gesture.FIST:
+            if self._left_down or self._gesture not in (Gesture.NONE, Gesture.FIST):
+                self.release_all()
+            self._gesture = gesture
+            return
+
+        x, y = point
+        raw = self.mapper.zone.to_screen(x, y, self.mapper.width, self.mapper.height)
+        new_target = self.mapper.update(x, y, t)
+        if new_target is not None:
+            self._target = new_target
+            self._history.append((t, new_target))
+            while self._history and t - self._history[0][0] > config.CURSOR_HISTORY_S:
+                self._history.popleft()
+        if self._target is None:
+            self._target = (round(raw[0]), round(raw[1]))
+
+        prev, self._gesture = self._gesture, gesture
+        if gesture is not prev:
+            self._exit(prev, t)
+            self._enter(gesture, raw, y, t)
+        self._hold(gesture, raw, y, t)
+
+    # -- state machine ----------------------------------------------------------
+    def _update_pause(self, gesture: Gesture, t: float) -> None:
+        if gesture is not Gesture.FIST:
+            self._fist_since = None
+            self._fist_used = False
+            return
+        if self._fist_since is None:
+            self._fist_since = t
+        if not self._fist_used and t - self._fist_since >= config.FIST_HOLD_S:
+            self.paused = not self.paused
+            self._fist_used = True
+
+    def _anchor(self, t: float) -> tuple[int, int]:
+        """Cursor position from CLICK_LOOKBACK_S ago (before the fingers started closing)."""
+        anchor = self._history[0][1] if self._history else self._target
+        for ts, pos in self._history:
+            if ts <= t - config.CLICK_LOOKBACK_S:
+                anchor = pos
+            else:
+                break
+        return anchor
+
+    def _enter(self, gesture: Gesture, raw: tuple[float, float], y: float, t: float) -> None:
+        if gesture in (Gesture.PINCH_INDEX, Gesture.PINCH_MIDDLE):
+            # Repeated pinch during the settle window reuses the same spot (double click).
+            if t >= self._settle_until:
+                ax, ay = self._anchor(t)
+                self.cursor.jump_to(ax, ay)
+            self._pinch_anchor = raw
+            if gesture is Gesture.PINCH_INDEX:
+                self.buttons.press("left")
+                self._left_down = True
+                self._dragging = False
+            else:
+                self.buttons.click("right")
+        elif gesture is Gesture.TWO_FINGERS:
+            self.cursor.stop_moving()
+            self._scroll_ref_y = y
+
+    def _exit(self, gesture: Gesture, t: float) -> None:
+        if gesture is Gesture.PINCH_INDEX and self._left_down:
+            self.buttons.release("left")
+            self._left_down = False
+            if not self._dragging:
+                self._settle_until = t + config.CLICK_SETTLE_S
+            self._dragging = False
+        elif gesture is Gesture.PINCH_MIDDLE:
+            self._settle_until = t + config.CLICK_SETTLE_S
+
+    def _moved_from_anchor(self, raw: tuple[float, float]) -> bool:
+        dx, dy = raw[0] - self._pinch_anchor[0], raw[1] - self._pinch_anchor[1]
+        return math.hypot(dx, dy) > config.DRAG_START_PX
+
+    def _hold(self, gesture: Gesture, raw: tuple[float, float], y: float, t: float) -> None:
+        if gesture is Gesture.PINCH_INDEX:
+            if not self._dragging and self._moved_from_anchor(raw):
+                self._dragging = True
+            if self._dragging:
+                self.cursor.set_target(*self._target)
+        elif gesture is Gesture.PINCH_MIDDLE:
+            pass  # frozen
+        elif gesture is Gesture.TWO_FINGERS:
+            dy = self._scroll_ref_y - y  # hand up -> positive
+            ticks = dy * config.SCROLL_TICKS_PER_FRAME
+            if config.SCROLL_INVERT:
+                ticks = -ticks
+            if abs(ticks) >= config.SCROLL_MIN_TICKS:
+                self.buttons.scroll(ticks)
+                self._scroll_ref_y = y
+        else:
+            if t < self._settle_until and not self._moved_from_anchor(raw):
+                return  # keep still after a click
+            self._settle_until = 0.0
+            self.cursor.set_target(*self._target)
 
 
 class HotkeyListener:
