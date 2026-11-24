@@ -45,10 +45,11 @@ Google's official model storage into `models/`. After that everything works offl
 
 ## Stage 1 — how to verify
 
-1. `python -m gesture_control.main` — a preview window opens with a blue work-zone rectangle.
-2. Raise a hand so the index fingertip (red dot) is inside the rectangle.
+1. `python -m gesture_control.main` — a preview window opens.
+2. Raise a hand; the index fingertip is marked with a red dot. Keep the whole hand in the
+   frame — a red bar on a frame edge means the hand is about to leave it and get lost.
    The cursor follows the finger smoothly, without jitter when the hand is still.
-3. Move the fingertip to each corner of the rectangle — the cursor reaches every screen corner.
+3. Reach every screen corner: slow moves for aiming, quick flicks to travel far.
 4. Press **Ctrl+Alt+G** — the status turns red (`Control: OFF`) and the cursor stops instantly,
    so the real mouse can be used. Press again to re-enable.
 5. Check that the preview shows at least ~25 FPS.
@@ -74,7 +75,8 @@ Tuning in `config.py`:
 - too slow to cross the screen → raise `ACCEL_MAX_GAIN`;
 - acceleration kicks in too early / late → `ACCEL_LOW_SPEED_PX_S` / `ACCEL_HIGH_SPEED_PX_S`.
 
-`CURSOR_MODE = "absolute"` restores the old behaviour: the blue rectangle is stretched
+`CURSOR_MODE = "absolute"` restores the old behaviour: a blue work-zone rectangle is shown in
+the preview and stretched
 over the whole screen and a hand position always maps to the same screen point.
 
 ## Gestures
