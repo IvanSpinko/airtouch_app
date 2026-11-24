@@ -184,6 +184,14 @@ FILTER_D_CUTOFF = 1.0
 # Cursor moves smaller than this (px) are ignored — removes micro-jitter.
 CURSOR_DEADZONE_PX = 2.5
 
+# Outlier rejection: MediaPipe sometimes makes the landmarks jump for a frame or
+# two (e.g. when re-detecting the hand). A hand "moving" faster than this
+# (frame heights per second) is ignored; if the jump persists for more than
+# OUTLIER_CONFIRM_FRAMES frames it is real, and the cursor re-anchors there
+# without jumping.
+OUTLIER_SPEED = 4.0
+OUTLIER_CONFIRM_FRAMES = 2
+
 # --- Cursor animation ---------------------------------------------------------
 # The camera gives ~30 targets per second; a separate thread glides the real cursor
 # towards the latest target at a higher rate, so motion looks continuous instead of

@@ -127,6 +127,8 @@ class CursorMapper:
         self._last_out: tuple[int, int] | None = None
         self._prev: tuple[float, float] | None = None
         self._prev_t = 0.0
+        self._raw_prev: tuple[float, float, float] | None = None
+        self._outliers = 0
         self._pos = ((width - 1) / 2, (height - 1) / 2)
         self._sync_position()
 
@@ -140,8 +142,28 @@ class CursorMapper:
         self._filter.reset()
         self._last_out = None
         self._prev = None
+        self._raw_prev = None
+        self._outliers = 0
         if self.mode == "relative":
             self._sync_position()
+
+    def _is_outlier(self, x: float, y: float, t: float) -> bool:
+        """Rejects single-frame landmark jumps; re-anchors if the jump persists."""
+        prev = self._raw_prev
+        if prev is not None and t > prev[2]:
+            speed = math.hypot((x - prev[0]) * config.FRAME_ASPECT, y - prev[1]) / (t - prev[2])
+            if speed > config.OUTLIER_SPEED:
+                self._outliers += 1
+                if self._outliers <= config.OUTLIER_CONFIRM_FRAMES:
+                    return True  # keep comparing against the last good point
+                # The hand really is somewhere else now: start over from here
+                # without sending the cursor across the screen.
+                last_seen = self._last_seen
+                self.reset()
+                self._last_seen = last_seen
+        self._outliers = 0
+        self._raw_prev = (x, y, t)
+        return False
 
     def _relative(self, fx: float, fy: float, t: float) -> tuple[float, float]:
         if self._prev is None or t <= self._prev_t:
@@ -161,6 +183,9 @@ class CursorMapper:
         if self._last_seen is not None and t - self._last_seen > self.lost_reset_s:
             self.reset()
         self._last_seen = t
+
+        if self._is_outlier(x, y, t):
+            return None
 
         relative = self.mode == "relative"
         sx, sy = self.zone.to_screen(x, y, self.width, self.height, clamp=not relative)
