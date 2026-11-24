@@ -276,6 +276,12 @@ MOUSE_DEMO_STEP_S = 0.7
 # pynput.keyboard.GlobalHotKeys format.
 HOTKEY_TOGGLE = "<ctrl>+<alt>+g"
 
+# --- Session log (python -m gesture_control.main --log) ------------------------
+SESSION_LOG_NAME = "session-%Y%m%d-%H%M%S.csv"
+SESSION_MARK_KEY = ord("m")
+# ml/replay.py: how many seconds before each MARK to show.
+REPLAY_MARK_WINDOW_S = 3.0
+
 # --- Preview window (debug, until the PyQt overlay exists) --------------------
 SHOW_PREVIEW = True
 # Show raw thumb-fingertip distances in the preview (for tuning PINCH_ON/OFF_RATIO).

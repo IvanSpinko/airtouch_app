@@ -9,6 +9,8 @@ Run: ``python -m gesture_control.main``
 
 from __future__ import annotations
 
+import argparse
+
 import cv2
 import numpy as np
 
@@ -144,7 +146,7 @@ def draw_preview(
     return out
 
 
-def run() -> None:
+def run(log: bool = False) -> None:
     enable_dpi_awareness()
     width, height = screen_size()
     zone = WorkZone()
@@ -158,6 +160,12 @@ def run() -> None:
     state = ControlState()
     state.subscribe(lambda on: print("Control", "enabled" if on else "disabled"))
     fps = FpsCounter()
+    logger = None
+    if log:
+        from gesture_control.sessionlog import SessionLogger
+
+        logger = SessionLogger()
+        print(f"Logging landmarks and actions to {logger.path} (press m to mark a mistake)")
 
     print(f"Screen {width}x{height}. {config.HOTKEY_TOGGLE} toggles control, q/Esc quits.")
     print("Gestures:", "trained classifier + rules" if classifier else "rules only (no model yet)")
@@ -188,6 +196,12 @@ def run() -> None:
                     detector.reset()
                     gesture = Gesture.NONE
                 was_enabled = enabled
+                if logger is not None:
+                    logger.write(
+                        ts, hand.landmarks if hand else None, hand.handedness if hand else "",
+                        gesture.value, detector.strength[ctl.left_gesture],
+                        detector.strength[ctl.right_gesture], ctl.last_event,
+                    )
 
                 current_fps = fps.tick()
                 if config.SHOW_PREVIEW:
@@ -202,17 +216,30 @@ def run() -> None:
                             recent_event(ctl, ts),
                         ),
                     )
-                    if cv2.waitKey(config.PREVIEW_WAIT_KEY_MS) & 0xFF in config.PREVIEW_QUIT_KEYS:
+                    key = cv2.waitKey(config.PREVIEW_WAIT_KEY_MS) & 0xFF
+                    if key in config.PREVIEW_QUIT_KEYS:
                         break
+                    if key == config.SESSION_MARK_KEY and logger is not None:
+                        logger.mark(ts)
+                        ctl.last_event = ("MARKED", ts)
         finally:
             # Never leave a mouse button stuck down.
             ctl.release_all()
+            if logger is not None:
+                logger.close()
+                print(f"Session log saved: {logger.path}")
     cv2.destroyAllWindows()
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="AirTouch: control the PC with hand gestures")
+    parser.add_argument(
+        "--log", action="store_true",
+        help="save landmarks and mouse actions to data/ for diagnosing false clicks",
+    )
+    args = parser.parse_args()
     try:
-        run()
+        run(log=args.log)
     except KeyboardInterrupt:
         pass
 
