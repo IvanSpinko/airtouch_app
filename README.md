@@ -14,6 +14,8 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
+`torch` is only needed to train the gesture model; the app runs it with numpy.
+
 ## Run
 
 ```powershell
@@ -39,6 +41,9 @@ Every module can be run on its own:
 | `python -m gesture_control.mouse`       | cursor visits all four screen corners          |
 | `python -m gesture_control.controller`  | prints ON/OFF when Ctrl+Alt+G is pressed       |
 | `python -m gesture_control.main`        | the full app                                   |
+| `python -m ml.record`                   | record gesture samples for training            |
+| `python -m ml.train`                    | train the gesture classifier                   |
+| `python -m ml.evaluate`                 | accuracy and confusion matrix on the test set  |
 
 On first run the MediaPipe hand model (`hand_landmarker.task`, ~8 MB) is downloaded from
 Google's official model storage into `models/`. After that everything works offline.
@@ -122,3 +127,58 @@ If a gesture is not recognized, run `python -m gesture_control.gestures` and loo
   whole hand inside the camera frame;
 - the cursor freezes while pointing → the preview shows `fist` by mistake:
   lower `FIST_TIP_RATIO` or raise `DEPTH_WEIGHT`.
+
+## Cursor stabilization
+
+- The cursor follows the **base knuckle of the index finger**, not the fingertip: it moves with
+  the hand but ignores finger bending and pinches. Change with `CURSOR_POINT_WEIGHTS`
+  (`{LM_INDEX_TIP: 1.0}` = fingertip, a blend = finer but less stable).
+- **Glitch rejection:** single-frame landmark jumps are ignored; if the hand really is elsewhere
+  the cursor re-anchors without jumping (`OUTLIER_SPEED`, `OUTLIER_CONFIRM_FRAMES`).
+- **Click safety:** a pinch must hold for `PINCH_CONFIRM_FRAMES` frames, release is debounced
+  (`PINCH_RELEASE_FRAMES`), no clicks for `ACQUIRE_GRACE_FRAMES` after the hand appears, and with a
+  trained model a pinch only clicks if the model agrees (`CLASSIFIER_PINCH_MIN_PROB`).
+
+## Stage 3 — gesture classifier
+
+### 1. Record data
+
+```powershell
+python -m ml.record
+```
+
+Press `1`…`7` to choose a gesture, `Space` to start / stop recording, `u` to undo the last
+samples, `q` to quit. Only landmark coordinates are saved (`data/gestures.csv`), never images.
+The goal is **500+ samples per gesture** (the counter turns green).
+
+| Key | Gesture        | How to record it                                                   |
+|-----|----------------|--------------------------------------------------------------------|
+| 1   | `none`         | relaxed hand, transitions, half-open poses — anything else         |
+| 2   | `point`        | index finger out, others folded (also your "ready to click" pose)  |
+| 3   | `pinch_index`  | thumb touching index fingertip                                     |
+| 4   | `pinch_middle` | thumb touching middle fingertip, index pointing                    |
+| 5   | `two_fingers`  | index + middle together, thumb tucked                              |
+| 6   | `fist`         | closed fist                                                        |
+| 7   | `open_palm`    | all fingers spread                                                 |
+
+Tips: while recording, slowly move and rotate the hand, change distance (0.3–1 m), use both
+hands and record in two or three sessions with different lighting. Variety matters more
+than count.
+
+### 2. Train and evaluate
+
+```powershell
+python -m ml.train
+python -m ml.evaluate
+```
+
+Training takes seconds and writes `models/gesture.npz`; `evaluate` prints accuracy, per-gesture
+precision / recall, the confusion matrix and whether the stage targets are met
+(>= 500 samples per gesture, >= 95% accuracy). If a pair of gestures is confused, record more
+varied samples of both and retrain.
+
+### 3. Use it
+
+`python -m gesture_control.main` picks the model up automatically (console:
+`trained classifier + rules`; the preview shows the model confidence next to the gesture).
+Delete `models/gesture.npz` or set `USE_CLASSIFIER = False` to go back to rules only.
