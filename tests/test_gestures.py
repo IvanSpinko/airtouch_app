@@ -357,3 +357,35 @@ def test_thumb_approaching_index_is_not_scroll():
     f = compute_features(ready)
     assert config.PINCH_ON_RATIO < f.pinch_index < config.SCROLL_THUMB_AWAY_RATIO
     assert feed(ready_detector(), ready, 20) != Gesture.TWO_FINGERS
+
+
+def curled_pinch():
+    """Thumb + index pinch with middle, ring and pinky curled into the palm."""
+    hand = make_hand((), thumb_tip=FIST_THUMB)
+    hand[4] = hand[8] + (0.005, 0.005, 0)  # thumb on the (curled) index tip
+    return hand
+
+
+def test_rules_alone_treat_curled_pinch_as_fist():
+    """Documents why the model has to decide: by rules this pose is a fist."""
+    assert compute_features(curled_pinch()).is_fist
+    seen = [ready_detector().update(curled_pinch()) for _ in range(5)]
+    assert Gesture.PINCH_INDEX not in seen
+
+
+def test_model_lets_curled_pinch_click():
+    d, _ = model_detector({Gesture.PINCH_INDEX: 0.9})
+    assert feed(d, curled_pinch(), config.PINCH_CONFIRM_FRAMES) == Gesture.PINCH_INDEX
+
+
+def test_model_fist_still_blocks_pinch_when_curled():
+    d, _ = model_detector({Gesture.FIST: 0.9})
+    seen = [d.update(curled_pinch()) for _ in range(10)]
+    assert Gesture.PINCH_INDEX not in seen
+
+
+def test_open_fingers_pinch_with_model():
+    """'OK sign': thumb + index touching, other fingers extended."""
+    ok = make_hand(("middle", "ring", "pinky"), thumb_tip="index")
+    d, _ = model_detector({Gesture.PINCH_INDEX: 0.9})
+    assert feed(d, ok, config.PINCH_CONFIRM_FRAMES) == Gesture.PINCH_INDEX
