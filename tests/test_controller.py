@@ -93,7 +93,9 @@ class Rig:
 
     def __init__(self):
         self.cursor, self.buttons = FakeCursor(), FakeButtons()
-        mapper = CursorMapper(W, H, WorkZone(0.0, 0.0, 1.0, 1.0, 1.0), deadzone_px=0.0)
+        mapper = CursorMapper(
+            W, H, WorkZone(0.0, 0.0, 1.0, 1.0, 1.0), deadzone_px=0.0, mode="absolute"
+        )
         self.ctl = GestureController(mapper, self.cursor, self.buttons)
         self.t = 0.0
 
