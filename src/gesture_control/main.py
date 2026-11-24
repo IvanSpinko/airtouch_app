@@ -19,7 +19,7 @@ from gesture_control.gestures import Gesture, GestureDetector
 from gesture_control.mouse import (
     CursorAnimator, CursorMapper, Mouse, WorkZone, enable_dpi_awareness, screen_size,
 )
-from gesture_control.tracker import Hand, HandTracker, draw_hand
+from gesture_control.tracker import Hand, HandTracker, draw_hand, near_edges
 
 
 def status_line(enabled: bool, ctl: GestureController) -> tuple[str, tuple[int, int, int]]:
@@ -30,17 +30,35 @@ def status_line(enabled: bool, ctl: GestureController) -> tuple[str, tuple[int, 
     return "Control: ON", config.COLOR_TEXT_ACTIVE
 
 
+def draw_edge_warning(frame: np.ndarray, sides: set[str]) -> None:
+    """Red bar along each frame edge the hand is about to leave."""
+    h, w = frame.shape[:2]
+    t = config.EDGE_WARN_THICKNESS
+    bars = {
+        "left": ((0, 0), (t, h - 1)),
+        "right": ((w - 1 - t, 0), (w - 1, h - 1)),
+        "top": ((0, 0), (w - 1, t)),
+        "bottom": ((0, h - 1 - t), (w - 1, h - 1)),
+    }
+    for side in sides:
+        cv2.rectangle(frame, *bars[side], config.COLOR_EDGE_WARN, cv2.FILLED)
+
+
 def draw_preview(
     frame: np.ndarray, hand: Hand | None, zone: WorkZone, gesture: Gesture,
     status: tuple[str, tuple[int, int, int]], fps: float, scroll_anchor: float | None = None,
 ) -> np.ndarray:
     out = frame.copy()
     h, w = out.shape[:2]
-    left, top, right, bottom = zone.effective()
-    cv2.rectangle(
-        out, (int(left * w), int(top * h)), (int(right * w), int(bottom * h)),
-        config.COLOR_ZONE, config.PREVIEW_LINE_THICKNESS,
-    )
+    if config.CURSOR_MODE == "absolute":
+        # Only meaningful in absolute mode, where this rectangle is the whole screen.
+        left, top, right, bottom = zone.effective()
+        cv2.rectangle(
+            out, (int(left * w), int(top * h)), (int(right * w), int(bottom * h)),
+            config.COLOR_ZONE, config.PREVIEW_LINE_THICKNESS,
+        )
+    if hand is not None:
+        draw_edge_warning(out, near_edges(hand))
     if scroll_anchor is not None:
         # Auto scroll: anchor line and the dead zone around it.
         ay = int(scroll_anchor * h)
