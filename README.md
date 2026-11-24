@@ -65,20 +65,21 @@ Tuning (all in `src/gesture_control/config.py`):
 | Action         | Gesture                                                      |
 |----------------|--------------------------------------------------------------|
 | Move cursor    | point with the index finger                                  |
-| Left click     | quick pinch: thumb + index                                   |
-| Double click   | two quick pinches                                            |
-| Drag           | pinch, hold and move the hand; open the pinch to drop        |
-| Right click    | pinch: thumb + middle finger                                 |
+| Left click     | quick pinch: thumb + **middle** finger                       |
+| Double click   | two quick thumb + middle pinches                             |
+| Drag           | thumb + middle pinch, hold and move the hand; open to drop   |
+| Right click    | pinch: thumb + index finger                                  |
 | Scroll         | index + middle finger up (other fingers folded), move hand up / down |
 | Pause / resume | hold a fist for ~1 s                                         |
 
 ## Stage 2 — how to verify
 
 1. `python -m gesture_control.main`; the preview shows the recognized `Gesture:`.
-2. **Click / open a file:** point at a file in Explorer, make two quick pinches — it opens.
-3. **Drag a window:** point at a window title bar, pinch, move the hand, open the pinch.
+2. **Click / open a file:** point at a file in Explorer, make two quick thumb + middle
+   pinches — it opens. The index finger stays still, so the cursor does not move.
+3. **Drag a window:** point at a window title bar, thumb + middle pinch, move the hand, open.
 4. **Scroll:** open a long web page, show two fingers and move the hand up / down.
-5. **Right click:** thumb + middle pinch on the desktop opens the context menu.
+5. **Right click:** thumb + index pinch on the desktop opens the context menu.
 6. **Pause:** hold a fist ~1 s — status turns `PAUSED`, nothing reacts; hold a fist again to resume.
 
 If a gesture is not recognized, run `python -m gesture_control.gestures` and look at the
@@ -87,4 +88,9 @@ If a gesture is not recognized, run `python -m gesture_control.gestures` and loo
 - clicks do not trigger → raise `PINCH_ON_RATIO`; accidental clicks → lower it;
 - drag starts when you only wanted to click → raise `DRAG_START_PX`;
 - double click is not registered → raise `CLICK_SETTLE_S`;
-- scroll too slow / fast → `SCROLL_TICKS_PER_FRAME`, direction → `SCROLL_INVERT`.
+- scroll too slow / fast → `SCROLL_TICKS_PER_FRAME`, direction → `SCROLL_INVERT`;
+- swap which pinch is left / right → `LEFT_BUTTON_GESTURE`, `RIGHT_BUTTON_GESTURE`;
+- the hand is lost too often → lower `MIN_HAND_*_CONFIDENCE`, add light, keep the
+  whole hand inside the camera frame;
+- the cursor freezes while pointing → the preview shows `fist` by mistake:
+  lower `FIST_TIP_RATIO` or raise `DEPTH_WEIGHT`.
