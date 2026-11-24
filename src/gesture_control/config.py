@@ -225,6 +225,10 @@ COLOR_TEXT_ACTIVE = (0, 255, 0)
 COLOR_TEXT_PAUSED = (0, 0, 255)
 COLOR_SCROLL_ANCHOR = (0, 165, 255)
 COLOR_SCROLL_DEADZONE = (0, 100, 160)
+# Preview warns when the hand is closer than this (fraction of the frame) to an edge.
+EDGE_WARN_MARGIN = 0.05
+EDGE_WARN_THICKNESS = 12
+COLOR_EDGE_WARN = (0, 0, 255)
 
 # FPS counter smoothing (exponential moving average).
 FPS_SMOOTHING = 0.9

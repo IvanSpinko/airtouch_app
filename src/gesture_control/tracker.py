@@ -138,6 +138,24 @@ class HandTracker:
         return Hand(landmarks=lms, handedness=category.category_name, score=category.score)
 
 
+def near_edges(hand: Hand, margin: float = config.EDGE_WARN_MARGIN) -> set[str]:
+    """Frame edges ("left", "right", "top", "bottom") the hand is about to leave.
+
+    Near an edge part of the hand is cut off and MediaPipe starts losing it.
+    """
+    xs, ys = hand.landmarks[:, 0], hand.landmarks[:, 1]
+    sides = set()
+    if xs.min() < margin:
+        sides.add("left")
+    if xs.max() > 1.0 - margin:
+        sides.add("right")
+    if ys.min() < margin:
+        sides.add("top")
+    if ys.max() > 1.0 - margin:
+        sides.add("bottom")
+    return sides
+
+
 def draw_hand(frame: np.ndarray, hand: Hand) -> None:
     """Draws the hand skeleton over the frame (in place)."""
     h, w = frame.shape[:2]
