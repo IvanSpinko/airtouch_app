@@ -168,7 +168,8 @@ def test_right_click_pinch():
     assert r.buttons.events == [("click", "right")]
 
 
-def test_two_fingers_scroll_up_and_down():
+def test_drag_scroll_up_and_down(monkeypatch):
+    monkeypatch.setattr(config, "SCROLL_MODE", "drag")
     r = Rig()
     r.run(G.POINT, (0.5, 0.5), seconds=0.5)
     for i in range(10):
@@ -262,8 +263,88 @@ def test_jitter_during_long_pinch_does_not_start_drag():
     assert not r.ctl.dragging
 
 
-def test_entering_scroll_pose_does_not_nudge_page():
+@pytest.mark.parametrize("mode", ["auto", "drag"])
+def test_entering_scroll_pose_does_not_nudge_page(monkeypatch, mode):
+    monkeypatch.setattr(config, "SCROLL_MODE", mode)
     r = Rig()
     r.run(G.POINT, (0.5, 0.5), seconds=0.5)
     r.run(G.TWO_FINGERS, (0.5, 0.5 - config.SCROLL_START_RATIO / 2), seconds=0.5)
     assert not any(e[0] == "scroll" for e in r.buttons.events)
+
+
+
+# -- auto scroll (mouse-wheel click style) --------------------------------------
+def scrolled(r):
+    return sum(e[1] for e in r.buttons.events if e[0] == "scroll")
+
+
+def auto_rig(monkeypatch):
+    monkeypatch.setattr(config, "SCROLL_MODE", "auto")
+    r = Rig()
+    r.run(G.POINT, (0.5, 0.5), seconds=0.3)
+    r.run(G.TWO_FINGERS, (0.5, 0.5))  # anchor at y = 0.5
+    return r
+
+
+def test_auto_scroll_keeps_scrolling_while_hand_is_held_above_anchor(monkeypatch):
+    r = auto_rig(monkeypatch)
+    offset = config.SCROLL_AUTO_DEADZONE + 0.1
+    r.run(G.TWO_FINGERS, (0.5, 0.5 - offset), seconds=1.0)
+    first = scrolled(r)
+    r.run(G.TWO_FINGERS, (0.5, 0.5 - offset), seconds=1.0)  # hand not moving
+    second = scrolled(r) - first
+    expected = 0.1 * config.SCROLL_AUTO_SPEED  # ticks per second
+    assert first > 0 and second == pytest.approx(expected, rel=0.1)
+
+
+def test_auto_scroll_down_below_anchor(monkeypatch):
+    r = auto_rig(monkeypatch)
+    r.run(G.TWO_FINGERS, (0.5, 0.5 + config.SCROLL_AUTO_DEADZONE + 0.1), seconds=1.0)
+    assert scrolled(r) < 0
+
+
+def test_auto_scroll_faster_further_from_anchor(monkeypatch):
+    near, far = auto_rig(monkeypatch), auto_rig(monkeypatch)
+    d = config.SCROLL_AUTO_DEADZONE
+    near.run(G.TWO_FINGERS, (0.5, 0.5 - d - 0.05), seconds=1.0)
+    far.run(G.TWO_FINGERS, (0.5, 0.5 - d - 0.15), seconds=1.0)
+    assert scrolled(far) > scrolled(near) > 0
+
+
+def test_auto_scroll_dead_zone_ignores_small_offsets(monkeypatch):
+    r = auto_rig(monkeypatch)
+    r.run(G.TWO_FINGERS, (0.5, 0.5 - config.SCROLL_AUTO_DEADZONE * 0.8), seconds=2.0)
+    assert scrolled(r) == 0
+
+
+def test_auto_scroll_speed_is_capped(monkeypatch):
+    r = auto_rig(monkeypatch)
+    r.run(G.TWO_FINGERS, (0.5, 0.0), seconds=1.0)
+    assert scrolled(r) <= config.SCROLL_AUTO_MAX_TICKS_S * 1.05
+
+
+def test_auto_scroll_stops_when_fingers_open(monkeypatch):
+    r = auto_rig(monkeypatch)
+    r.run(G.TWO_FINGERS, (0.5, 0.3), seconds=0.5)
+    before = len(r.buttons.events)
+    r.run(G.POINT, (0.5, 0.3), seconds=1.0)
+    assert len(r.buttons.events) == before
+    assert r.ctl.scroll_anchor is None
+
+
+def test_auto_scroll_anchor_resets_on_new_pose(monkeypatch):
+    r = auto_rig(monkeypatch)
+    r.run(G.TWO_FINGERS, (0.5, 0.3), seconds=0.3)
+    r.run(G.POINT, (0.5, 0.3), seconds=0.3)
+    r.run(G.TWO_FINGERS, (0.5, 0.3))  # new anchor where the hand is now
+    assert r.ctl.scroll_anchor == pytest.approx(0.3)
+    before = scrolled(r)
+    r.run(G.TWO_FINGERS, (0.5, 0.3), seconds=1.0)
+    assert scrolled(r) == before
+
+
+def test_auto_scroll_invert(monkeypatch):
+    monkeypatch.setattr(config, "SCROLL_INVERT", True)
+    r = auto_rig(monkeypatch)
+    r.run(G.TWO_FINGERS, (0.5, 0.3), seconds=0.5)
+    assert scrolled(r) < 0
