@@ -271,10 +271,13 @@ class GestureDetector:
         # A fist brings all fingertips close to the thumb, so it must never count as
         # a pinch — checked on the raw current frame, not the debounced pose, so a
         # click cannot slip through while the fist is still being confirmed.
-        model_fist = self.probs is not None and (
-            self.probs.get(Gesture.FIST, 0.0) >= config.CLASSIFIER_MIN_PROB
-        )
-        if f.is_fist or model_fist:
+        # The rule cannot tell a fist from a pinch made with the other fingers curled
+        # in, so with a trained model the model decides.
+        if self.probs is not None:
+            fist_like = self.probs.get(Gesture.FIST, 0.0) >= config.CLASSIFIER_MIN_PROB
+        else:
+            fist_like = f.is_fist
+        if fist_like:
             self._pinch = None
             self._pinch_votes = {g: 0 for g in PINCHES}
             self._pinch_frames = 0
