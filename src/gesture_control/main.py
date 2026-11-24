@@ -1,8 +1,8 @@
-"""Entry point: camera -> hand tracking -> smoothed cursor.
+"""Entry point: camera -> hand tracking -> gestures -> mouse.
 
-Stage 1: the cursor follows the index fingertip inside the work zone;
-Ctrl+Alt+G instantly disables/enables control. Press q or Esc in the preview
-window (or Ctrl+C in the console) to quit.
+The cursor follows the index fingertip inside the work zone; pinches click and drag,
+two fingers scroll, a held fist pauses. Ctrl+Alt+G instantly disables/enables control.
+Press q or Esc in the preview window (or Ctrl+C in the console) to quit.
 
 Run: ``python -m gesture_control.main``
 """
@@ -14,15 +14,25 @@ import numpy as np
 
 from gesture_control import config
 from gesture_control.camera import Camera, FpsCounter
-from gesture_control.controller import ControlState, HotkeyListener
+from gesture_control.controller import ControlState, GestureController, HotkeyListener
+from gesture_control.gestures import Gesture, GestureDetector
 from gesture_control.mouse import (
     CursorAnimator, CursorMapper, Mouse, WorkZone, enable_dpi_awareness, screen_size,
 )
 from gesture_control.tracker import Hand, HandTracker, draw_hand
 
 
+def status_line(enabled: bool, ctl: GestureController) -> tuple[str, tuple[int, int, int]]:
+    if not enabled:
+        return f"Control: OFF ({config.HOTKEY_TOGGLE})", config.COLOR_TEXT_PAUSED
+    if ctl.paused:
+        return "Control: PAUSED (hold fist)", config.COLOR_TEXT_PAUSED
+    return "Control: ON", config.COLOR_TEXT_ACTIVE
+
+
 def draw_preview(
-    frame: np.ndarray, hand: Hand | None, zone: WorkZone, enabled: bool, fps: float
+    frame: np.ndarray, hand: Hand | None, zone: WorkZone, gesture: Gesture,
+    status: tuple[str, tuple[int, int, int]], fps: float,
 ) -> np.ndarray:
     out = frame.copy()
     h, w = out.shape[:2]
@@ -38,16 +48,17 @@ def draw_preview(
             out, (int(x * w), int(y * h)), config.PREVIEW_CURSOR_RADIUS,
             config.COLOR_CURSOR_POINT, cv2.FILLED,
         )
+    text, color = status
     lines = [
         f"FPS: {fps:.1f}",
         f"Hand: {hand.handedness if hand else '-'}",
-        "Control: ON" if enabled else f"Control: OFF ({config.HOTKEY_TOGGLE})",
+        f"Gesture: {gesture.value}",
+        text,
     ]
-    color = config.COLOR_TEXT_ACTIVE if enabled else config.COLOR_TEXT_PAUSED
     ox, oy = config.PREVIEW_TEXT_ORIGIN
-    for i, text in enumerate(lines):
+    for i, line in enumerate(lines):
         cv2.putText(
-            out, text, (ox, oy + i * config.PREVIEW_TEXT_LINE_HEIGHT),
+            out, line, (ox, oy + i * config.PREVIEW_TEXT_LINE_HEIGHT),
             cv2.FONT_HERSHEY_SIMPLEX, config.PREVIEW_FONT_SCALE, color,
             config.PREVIEW_FONT_THICKNESS,
         )
@@ -59,37 +70,53 @@ def run() -> None:
     width, height = screen_size()
     zone = WorkZone()
     mapper = CursorMapper(width, height, zone)
-    animator = CursorAnimator(Mouse())
+    mouse = Mouse()
+    animator = CursorAnimator(mouse)
+    detector = GestureDetector()
+    ctl = GestureController(mapper, animator, mouse)
     state = ControlState()
     state.subscribe(lambda on: print("Control", "enabled" if on else "disabled"))
-    # Re-enabling must not glide the cursor in from where it was disabled.
-    state.subscribe(lambda on: mapper.reset() if on else animator.stop_moving())
     fps = FpsCounter()
 
     print(f"Screen {width}x{height}. {config.HOTKEY_TOGGLE} toggles control, q/Esc quits.")
+    was_enabled = True
+    gesture = Gesture.NONE
     with Camera() as cam, HandTracker() as tracker, HotkeyListener(state), animator:
-        while cam.is_running:
-            item = cam.read(timeout=1.0)
-            if item is None:
-                continue
-            frame, ts = item
-            hand = tracker.process(frame, ts)
-            enabled = state.enabled
+        try:
+            while cam.is_running:
+                item = cam.read(timeout=1.0)
+                if item is None:
+                    continue
+                frame, ts = item
+                hand = tracker.process(frame, ts)
+                enabled = state.enabled
 
-            if hand is not None and enabled:
-                x, y = hand.point(config.CURSOR_LANDMARK)
-                pos = mapper.update(x, y, ts)
-                if pos is not None:
-                    animator.set_target(*pos)
+                if enabled:
+                    if not was_enabled:
+                        # Re-enabling must not glide the cursor in from a stale spot.
+                        mapper.reset()
+                    gesture = detector.update(hand.landmarks if hand else None)
+                    point = hand.point(config.CURSOR_LANDMARK) if hand else None
+                    ctl.update(gesture, point, ts)
+                elif was_enabled:
+                    ctl.release_all()
+                    detector.reset()
+                    gesture = Gesture.NONE
+                was_enabled = enabled
 
-            current_fps = fps.tick()
-            if config.SHOW_PREVIEW:
-                cv2.imshow(
-                    config.PREVIEW_WINDOW_NAME,
-                    draw_preview(frame, hand, zone, enabled, current_fps),
-                )
-                if cv2.waitKey(config.PREVIEW_WAIT_KEY_MS) & 0xFF in config.PREVIEW_QUIT_KEYS:
-                    break
+                current_fps = fps.tick()
+                if config.SHOW_PREVIEW:
+                    cv2.imshow(
+                        config.PREVIEW_WINDOW_NAME,
+                        draw_preview(
+                            frame, hand, zone, gesture, status_line(enabled, ctl), current_fps
+                        ),
+                    )
+                    if cv2.waitKey(config.PREVIEW_WAIT_KEY_MS) & 0xFF in config.PREVIEW_QUIT_KEYS:
+                        break
+        finally:
+            # Never leave a mouse button stuck down.
+            ctl.release_all()
     cv2.destroyAllWindows()
 
 
