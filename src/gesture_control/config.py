@@ -146,6 +146,19 @@ WORK_ZONE_BOTTOM = 0.65
 # Sensitivity: >1 shrinks the work zone around its center (faster cursor).
 CURSOR_SENSITIVITY = 1.0
 
+# --- Cursor mode and pointer acceleration -------------------------------------
+# "relative": the cursor moves by hand movement with acceleration, like a mouse
+#             (precise when slow, fast when flicked). Default.
+# "absolute": the work zone is stretched over the screen 1:1.
+CURSOR_MODE = "relative"
+# Gain applied to hand movement (1.0 = the same speed as absolute mode).
+# Slow hand movement gets ACCEL_MIN_GAIN, fast movement ACCEL_MAX_GAIN.
+ACCEL_MIN_GAIN = 0.25
+ACCEL_MAX_GAIN = 1.6
+# Hand speed (in absolute-mode screen px/s) where acceleration starts / saturates.
+ACCEL_LOW_SPEED_PX_S = 300.0
+ACCEL_HIGH_SPEED_PX_S = 3000.0
+
 # --- Cursor smoothing (One Euro Filter, in screen pixels) ----------------------
 # min_cutoff — lower = stronger jitter smoothing at rest.
 # beta — higher = less lag during fast movement.
