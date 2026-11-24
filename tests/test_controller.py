@@ -378,3 +378,15 @@ def test_middle_pinch_is_right_click_end_to_end():
     pinch = make_hand(("index", "middle"), thumb_tip="middle")
     r = run_detector_and_controller([point] * 15 + [pinch] * 3 + [point] * 10)
     assert r.buttons.events == [("click", "right")]
+
+
+def test_controller_reports_last_event():
+    r = Rig()
+    r.run(G.POINT, seconds=0.5)
+    r.run(LEFT, seconds=0.1)
+    assert r.ctl.last_event[0] == "LEFT DOWN"
+    r.run(G.POINT)
+    assert r.ctl.last_event[0] == "LEFT CLICK"
+    r.run(G.POINT, seconds=0.5)
+    r.run(RIGHT, seconds=0.1)
+    assert r.ctl.last_event[0] == "RIGHT CLICK"

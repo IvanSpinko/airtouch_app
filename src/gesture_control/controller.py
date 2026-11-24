@@ -94,6 +94,8 @@ class GestureController:
         self.cursor = cursor
         self.buttons = buttons
         self.paused = False
+        # Last mouse action as (label, time), shown briefly in the preview.
+        self.last_event: tuple[str, float] | None = None
         self.left_gesture = Gesture(config.LEFT_BUTTON_GESTURE)
         self.right_gesture = Gesture(config.RIGHT_BUTTON_GESTURE)
         self._gesture = Gesture.NONE
@@ -164,6 +166,9 @@ class GestureController:
         self._hold(gesture, y, t)
 
     # -- state machine ----------------------------------------------------------
+    def _event(self, label: str, t: float) -> None:
+        self.last_event = (label, t)
+
     def _update_pause(self, gesture: Gesture, t: float) -> None:
         if gesture is not Gesture.FIST:
             self._fist_since = None
@@ -174,6 +179,7 @@ class GestureController:
         if not self._fist_used and t - self._fist_since >= config.FIST_HOLD_S:
             self.paused = not self.paused
             self._fist_used = True
+            self._event("PAUSED" if self.paused else "RESUMED", t)
 
     def _anchor(self, t: float) -> tuple[int, int]:
         """Cursor position from CLICK_LOOKBACK_S ago (before the fingers started closing)."""
@@ -197,8 +203,10 @@ class GestureController:
                 self.buttons.press("left")
                 self._left_down = True
                 self._dragging = False
+                self._event("LEFT DOWN", t)
             else:
                 self.buttons.click("right")
+                self._event("RIGHT CLICK", t)
         elif gesture is Gesture.TWO_FINGERS:
             self.cursor.stop_moving()
             self._scroll_ref_y = y
@@ -210,6 +218,7 @@ class GestureController:
         if gesture is self.left_gesture and self._left_down:
             self.buttons.release("left")
             self._left_down = False
+            self._event("DROP" if self._dragging else "LEFT CLICK", t)
             if not self._dragging:
                 self._settle_until = t + config.CLICK_SETTLE_S
             self._dragging = False
@@ -227,6 +236,7 @@ class GestureController:
             held = t - self._pinch_since >= config.DRAG_MIN_HOLD_S
             if not self._dragging and held and self._moved_from_anchor():
                 self._dragging = True
+                self._event("DRAG", t)
             if self._dragging:
                 self.cursor.set_target(*self._target)
         elif gesture is self.right_gesture:
