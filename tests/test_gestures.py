@@ -411,9 +411,9 @@ def test_side_pinch_is_invisible_to_the_distance_rule():
 
 def test_confident_model_starts_pinch_without_distance():
     d, _ = model_detector({Gesture.PINCH_INDEX: 0.95})
-    n = config.CLASSIFIER_PINCH_CONFIRM_FRAMES
+    n = config.PINCH_CONFIRM_FRAMES
     seen = [d.update(side_pinch()) for _ in range(n)]
-    assert Gesture.PINCH_INDEX not in seen[:-1]  # needs the longer confirmation
+    assert Gesture.PINCH_INDEX not in seen[:-1]
     assert seen[-1] == Gesture.PINCH_INDEX
 
 
@@ -424,14 +424,14 @@ def test_slightly_squeezed_fingers_need_very_confident_model():
 
 
 def test_unsure_model_does_not_start_pinch_alone():
-    d, _ = model_detector({Gesture.PINCH_INDEX: config.CLASSIFIER_PINCH_ON_PROB - 0.1})
+    d, _ = model_detector({Gesture.PINCH_INDEX: config.PINCH_STRENGTH_ON - 0.1})
     assert Gesture.PINCH_INDEX not in [d.update(side_pinch()) for _ in range(10)]
 
 
 def test_model_holds_and_releases_side_pinch():
     d, clf = model_detector({Gesture.PINCH_INDEX: 0.95})
-    assert feed(d, side_pinch(), config.CLASSIFIER_PINCH_CONFIRM_FRAMES) == Gesture.PINCH_INDEX
-    clf.set({Gesture.PINCH_INDEX: config.CLASSIFIER_PINCH_HOLD_PROB + 0.05})
+    assert feed(d, side_pinch(), config.PINCH_CONFIRM_FRAMES) == Gesture.PINCH_INDEX
+    clf.set({Gesture.PINCH_INDEX: config.PINCH_STRENGTH_OFF + 0.05})
     assert feed(d, side_pinch(), 10) == Gesture.PINCH_INDEX  # held (drag)
     clf.set({Gesture.POINT: 0.9})
     assert feed(d, side_pinch(), config.PINCH_RELEASE_FRAMES) != Gesture.PINCH_INDEX
@@ -442,3 +442,44 @@ def test_model_only_pinch_respects_acquisition_grace():
     d = GestureDetector(clf)
     seen = [d.update(side_pinch()) for _ in range(config.ACQUIRE_GRACE_FRAMES)]
     assert Gesture.PINCH_INDEX not in seen
+
+
+
+# -- pinch strength ------------------------------------------------------------------
+from gesture_control.gestures import distance_strength, pinch_strength  # noqa: E402
+
+
+def test_distance_strength_ramp():
+    assert distance_strength(0.0) == 1.0
+    assert distance_strength(config.PINCH_ON_RATIO) == 1.0
+    assert distance_strength(config.PINCH_OFF_RATIO) == 0.0
+    mid = (config.PINCH_ON_RATIO + config.PINCH_OFF_RATIO) / 2
+    assert distance_strength(mid) == pytest.approx(0.5)
+
+
+def test_strength_without_model_is_distance():
+    f = compute_features(POSES["pinch_index"][0])
+    assert pinch_strength(Gesture.PINCH_INDEX, f, None) == 1.0
+    assert pinch_strength(Gesture.PINCH_INDEX, compute_features(POSES["point"][0]), None) == 0.0
+
+
+def test_strength_with_model():
+    touching = compute_features(POSES["pinch_index"][0])
+    apart = compute_features(POSES["point"][0])
+    g = Gesture.PINCH_INDEX
+    # model sure, fingertips apart (curled / side pinch): model decides
+    assert pinch_strength(g, apart, {g: 0.95}) == 0.95
+    # fingertips touching, model half agrees: distance counts
+    assert pinch_strength(g, touching, {g: 0.5}) == 1.0
+    # fingertips touching, model disagrees: no click from the rule
+    assert pinch_strength(g, touching, {g: 0.1}) == 0.1
+    # ...but an already held pinch is not dropped by the model wobble
+    assert pinch_strength(g, touching, {g: 0.1}, gate=False) == 1.0
+
+
+def test_detector_exposes_strength_for_preview():
+    d = ready_detector()
+    d.update(POSES["pinch_index"][0])
+    assert d.strength[Gesture.PINCH_INDEX] == 1.0
+    d.update(POSES["point"][0])
+    assert d.strength[Gesture.PINCH_MIDDLE] == 0.0
