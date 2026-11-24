@@ -79,8 +79,13 @@ PALM_LANDMARKS = (LM_WRIST, LM_INDEX_MCP, LM_MIDDLE_MCP, LM_RING_MCP, LM_PINKY_M
 # Pinch hysteresis: starts below ON, ends above OFF.
 PINCH_ON_RATIO = 0.25
 PINCH_OFF_RATIO = 0.38
-# Frames a pinch must be seen before it counts (filters single-frame glitches).
-PINCH_CONFIRM_FRAMES = 2
+# Frames a pinch must be seen before it counts (filters short glitches). The click
+# still lands at the pre-pinch spot thanks to CLICK_LOOKBACK_S.
+PINCH_CONFIRM_FRAMES = 3
+# Frames the fingers must stay open before a pinch is released (debounce).
+PINCH_RELEASE_FRAMES = 2
+# After the hand (re)appears, no new pinch for this many frames.
+ACQUIRE_GRACE_FRAMES = 6
 # A finger is extended if wrist->tip is longer than wrist->pip by this factor.
 FINGER_EXTENDED_RATIO = 1.15
 # Fist: every fingertip must be within this distance of the palm center.

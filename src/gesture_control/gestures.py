@@ -116,6 +116,8 @@ class GestureDetector:
 
     def reset(self) -> None:
         self._lost_frames = 0
+        self._seen_frames = 0
+        self._release_frames = 0
         self._last = Gesture.NONE
         self._pinch: Gesture | None = None
         self._pinch_candidate: Gesture | None = None
@@ -125,17 +127,23 @@ class GestureDetector:
         self._pose_frames = 0
 
     def _update_pinch(self, f: HandFeatures) -> Gesture | None:
-        if self._pinch is Gesture.PINCH_INDEX:
-            if f.pinch_index < config.PINCH_OFF_RATIO:
+        if self._pinch is not None:
+            dist = f.pinch_index if self._pinch is Gesture.PINCH_INDEX else f.pinch_middle
+            if dist < config.PINCH_OFF_RATIO:
+                self._release_frames = 0
+                return self._pinch
+            # Release only after a few open frames, so a flicker mid-drag does not
+            # drop the item or turn one click into two.
+            self._release_frames += 1
+            if self._release_frames < config.PINCH_RELEASE_FRAMES:
                 return self._pinch
             self._pinch = None
-        elif self._pinch is Gesture.PINCH_MIDDLE:
-            if f.pinch_middle < config.PINCH_OFF_RATIO:
-                return self._pinch
-            self._pinch = None
+            self._release_frames = 0
 
         candidate = None
-        if min(f.pinch_index, f.pinch_middle) < config.PINCH_ON_RATIO:
+        # Right after the hand appears its landmarks are unreliable: no new clicks.
+        acquiring = self._seen_frames <= config.ACQUIRE_GRACE_FRAMES
+        if not acquiring and min(f.pinch_index, f.pinch_middle) < config.PINCH_ON_RATIO:
             candidate = (
                 Gesture.PINCH_INDEX if f.pinch_index <= f.pinch_middle else Gesture.PINCH_MIDDLE
             )
@@ -171,6 +179,7 @@ class GestureDetector:
                 self.reset()
             return self._last
         self._lost_frames = 0
+        self._seen_frames += 1
         f = compute_features(landmarks)
         pose = self._update_pose(f)
         # A fist brings all fingertips close to the thumb, so it must never count as
