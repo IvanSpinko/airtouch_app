@@ -239,9 +239,9 @@ def test_release_all_lets_go_of_button():
     assert r.buttons.names() == ["press", "release"]
 
 
-def test_default_mapping_keeps_index_finger_free_for_left_click():
-    assert LEFT is G.PINCH_MIDDLE
-    assert RIGHT is G.PINCH_INDEX
+def test_default_mapping_left_is_index_right_is_middle():
+    assert LEFT is G.PINCH_INDEX
+    assert RIGHT is G.PINCH_MIDDLE
 
 
 def test_quick_pinch_with_hand_moving_is_click_not_drag():
@@ -351,19 +351,30 @@ def test_auto_scroll_invert(monkeypatch):
 
 
 # -- detector + controller together ---------------------------------------------------
-def test_quick_middle_pinch_tap_clicks_left_button_end_to_end():
-    from handgen import make_hand
-
+def run_detector_and_controller(frames):
     from gesture_control.gestures import GestureDetector
 
     r = Rig()
     d = GestureDetector()
-    point = make_hand(("index",))
-    pinch = make_hand(("index",), thumb_tip="middle")
-    pinch[9:13] = make_hand(("index", "middle"))[9:13]  # middle extended to meet the thumb
-    pinch[4] = pinch[12] + (0.005, 0.005, 0)
-    frames = [point] * 15 + [pinch] * 2 + [point] * 10
     for lm in frames:
         r.ctl.update(d.update(lm), (0.5, 0.5), r.t)
         r.t += DT
+    return r
+
+
+def test_quick_index_pinch_tap_is_left_click_end_to_end():
+    from handgen import make_hand
+
+    point = make_hand(("index",))
+    pinch = make_hand(("index",), thumb_tip="index")
+    r = run_detector_and_controller([point] * 15 + [pinch] * 2 + [point] * 10)
     assert r.buttons.events == [("press", "left"), ("release", "left")]
+
+
+def test_middle_pinch_is_right_click_end_to_end():
+    from handgen import make_hand
+
+    point = make_hand(("index",))
+    pinch = make_hand(("index", "middle"), thumb_tip="middle")
+    r = run_detector_and_controller([point] * 15 + [pinch] * 3 + [point] * 10)
+    assert r.buttons.events == [("click", "right")]

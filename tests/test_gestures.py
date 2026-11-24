@@ -347,3 +347,13 @@ def test_majority_decides_pinch_type():
     d = ready_detector()
     frames = [thumb_between(0.3)] * config.PINCH_CONFIRM_FRAMES  # clearly closer to middle
     assert [d.update(h) for h in frames][-1] == Gesture.PINCH_MIDDLE
+
+
+def test_thumb_approaching_index_is_not_scroll():
+    """Getting ready for a left click (thumb + index) must not trigger scroll."""
+    hand = make_hand(("index", "middle"))
+    tip = np.array([hand[8, 0] * config.FRAME_ASPECT, hand[8, 1]])
+    ready = make_hand(("index", "middle"), thumb_tip=tuple(tip + (-0.08, 0.06)))
+    f = compute_features(ready)
+    assert config.PINCH_ON_RATIO < f.pinch_index < config.SCROLL_THUMB_AWAY_RATIO
+    assert feed(ready_detector(), ready, 20) != Gesture.TWO_FINGERS
