@@ -41,10 +41,40 @@ NATIVE_LOG_LEVELS = {"GLOG_minloglevel": "2", "TF_CPP_MIN_LOG_LEVEL": "2"}
 LM_WRIST = 0
 LM_THUMB_TIP = 4
 LM_INDEX_MCP = 5
+LM_INDEX_PIP = 6
 LM_INDEX_TIP = 8
+LM_MIDDLE_MCP = 9
+LM_MIDDLE_PIP = 10
 LM_MIDDLE_TIP = 12
+LM_RING_PIP = 14
 LM_RING_TIP = 16
+LM_PINKY_PIP = 18
 LM_PINKY_TIP = 20
+# (pip, tip) per finger, thumb excluded.
+FINGER_JOINTS = {
+    "index": (LM_INDEX_PIP, LM_INDEX_TIP),
+    "middle": (LM_MIDDLE_PIP, LM_MIDDLE_TIP),
+    "ring": (LM_RING_PIP, LM_RING_TIP),
+    "pinky": (LM_PINKY_PIP, LM_PINKY_TIP),
+}
+# Landmarks x/y are normalized separately by frame width and height; distances are
+# measured after scaling x by this aspect ratio so they are not distorted.
+FRAME_ASPECT = CAMERA_WIDTH / CAMERA_HEIGHT
+
+# --- Rule-based gestures ------------------------------------------------------
+# All distances are relative to the palm size (wrist -> middle finger MCP),
+# so thresholds do not depend on how far the hand is from the camera.
+# Pinch hysteresis: starts below ON, ends above OFF.
+PINCH_ON_RATIO = 0.25
+PINCH_OFF_RATIO = 0.38
+# Frames a pinch must be seen before it counts (filters single-frame glitches).
+PINCH_CONFIRM_FRAMES = 2
+# A finger is extended if wrist->tip is longer than wrist->pip by this factor.
+FINGER_EXTENDED_RATIO = 1.15
+# Open palm also requires the thumb to be far from the index fingertip.
+OPEN_PALM_THUMB_RATIO = 0.6
+# Static poses (fist, two fingers, palm, point) must be stable for this many frames.
+POSE_STABLE_FRAMES = 3
 
 # Landmark the cursor follows.
 CURSOR_LANDMARK = LM_INDEX_TIP
