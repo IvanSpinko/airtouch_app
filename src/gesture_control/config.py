@@ -265,6 +265,8 @@ HOTKEY_TOGGLE = "<ctrl>+<alt>+g"
 
 # --- Preview window (debug, until the PyQt overlay exists) --------------------
 SHOW_PREVIEW = True
+# Show thumb-finger pinch distances in the preview (helps tune PINCH_ON_RATIO).
+PREVIEW_SHOW_PINCH_DEBUG = True
 PREVIEW_WINDOW_NAME = "AirTouch preview"
 PREVIEW_QUIT_KEYS = (ord("q"), 27)  # q or Esc
 PREVIEW_WAIT_KEY_MS = 1

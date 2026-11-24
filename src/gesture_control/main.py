@@ -15,7 +15,7 @@ import numpy as np
 from gesture_control import config
 from gesture_control.camera import Camera, FpsCounter
 from gesture_control.controller import ControlState, GestureController, HotkeyListener
-from gesture_control.gestures import Gesture, GestureClassifier, GestureDetector
+from gesture_control.gestures import Gesture, GestureClassifier, GestureDetector, HandFeatures
 from gesture_control.mouse import (
     CursorAnimator, CursorMapper, Mouse, WorkZone, enable_dpi_awareness, screen_size,
 )
@@ -47,7 +47,7 @@ def draw_edge_warning(frame: np.ndarray, sides: set[str]) -> None:
 def draw_preview(
     frame: np.ndarray, hand: Hand | None, zone: WorkZone, gesture: Gesture,
     status: tuple[str, tuple[int, int, int]], fps: float, scroll_anchor: float | None = None,
-    model_conf: float | None = None,
+    model_conf: float | None = None, features: HandFeatures | None = None,
 ) -> np.ndarray:
     out = frame.copy()
     h, w = out.shape[:2]
@@ -82,6 +82,12 @@ def draw_preview(
         f"Gesture: {gesture.value}" + (f" ({model_conf:.0%})" if model_conf is not None else ""),
         text,
     ]
+    if config.PREVIEW_SHOW_PINCH_DEBUG and hand is not None and features is not None:
+        # Pinch distances vs the click threshold: below it = pinched.
+        lines.append(
+            f"thumb-middle {features.pinch_middle:.2f}  thumb-index {features.pinch_index:.2f}"
+            f"  (click < {config.PINCH_ON_RATIO:.2f})"
+        )
     ox, oy = config.PREVIEW_TEXT_ORIGIN
     for i, line in enumerate(lines):
         cv2.putText(
@@ -145,6 +151,7 @@ def run() -> None:
                             frame, hand, zone, gesture, status_line(enabled, ctl), current_fps,
                             ctl.scroll_anchor,
                             max(detector.probs.values()) if detector.probs and hand else None,
+                            detector.features,
                         ),
                     )
                     if cv2.waitKey(config.PREVIEW_WAIT_KEY_MS) & 0xFF in config.PREVIEW_QUIT_KEYS:
