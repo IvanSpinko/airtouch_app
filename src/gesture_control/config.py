@@ -69,6 +69,13 @@ CURSOR_DEADZONE_PX = 1.5
 # does not glide in from a stale position.
 HAND_LOST_RESET_S = 0.3
 
+# --- Windows API constants ----------------------------------------------------
+DPI_AWARENESS_PER_MONITOR = 2  # PROCESS_PER_MONITOR_DPI_AWARE
+SM_CXSCREEN = 0
+SM_CYSCREEN = 1
+# Pause between steps of the ``python -m gesture_control.mouse`` demo, s.
+MOUSE_DEMO_STEP_S = 0.7
+
 # --- Hotkeys ------------------------------------------------------------------
 # pynput.keyboard.GlobalHotKeys format.
 HOTKEY_TOGGLE = "<ctrl>+<alt>+g"
