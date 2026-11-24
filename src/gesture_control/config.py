@@ -46,8 +46,10 @@ LM_INDEX_TIP = 8
 LM_MIDDLE_MCP = 9
 LM_MIDDLE_PIP = 10
 LM_MIDDLE_TIP = 12
+LM_RING_MCP = 13
 LM_RING_PIP = 14
 LM_RING_TIP = 16
+LM_PINKY_MCP = 17
 LM_PINKY_PIP = 18
 LM_PINKY_TIP = 20
 # (pip, tip) per finger, thumb excluded.
@@ -60,6 +62,11 @@ FINGER_JOINTS = {
 # Landmarks x/y are normalized separately by frame width and height; distances are
 # measured after scaling x by this aspect ratio so they are not distorted.
 FRAME_ASPECT = CAMERA_WIDTH / CAMERA_HEIGHT
+# Weight of MediaPipe depth (z) in 3D distances. Depth lets a finger pointed at the
+# camera still count as extended; 0 would fall back to pure 2D.
+DEPTH_WEIGHT = 1.0
+# Landmarks whose mean is the palm center: wrist and the four finger MCPs.
+PALM_LANDMARKS = (LM_WRIST, LM_INDEX_MCP, LM_MIDDLE_MCP, LM_RING_MCP, LM_PINKY_MCP)
 
 # --- Rule-based gestures ------------------------------------------------------
 # All distances are relative to the palm size (wrist -> middle finger MCP),
@@ -71,6 +78,8 @@ PINCH_OFF_RATIO = 0.38
 PINCH_CONFIRM_FRAMES = 2
 # A finger is extended if wrist->tip is longer than wrist->pip by this factor.
 FINGER_EXTENDED_RATIO = 1.15
+# Fist: every fingertip must be within this distance of the palm center.
+FIST_TIP_RATIO = 0.75
 # Open palm also requires the thumb to be far from the index fingertip.
 OPEN_PALM_THUMB_RATIO = 0.6
 # Static poses (fist, two fingers, palm, point) must be stable for this many frames.

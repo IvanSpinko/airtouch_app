@@ -3,7 +3,7 @@
 Stage 2: rule-based detector (pinches by distance thresholds with hysteresis, static
 poses by which fingers are extended). Stage 3 adds a trained classifier on top.
 
-All measurements are normalized by palm size, so they do not depend on the distance
+All measurements are 3D, normalized by palm size, so they do not depend on the distance
 to the camera, and they are symmetric, so left and right hands work the same way.
 
 Check: ``python -m gesture_control.gestures`` shows the recognized gesture live.
@@ -36,20 +36,34 @@ class HandFeatures:
     pinch_index: float
     pinch_middle: float
     extended: dict[str, bool]
+    # Largest fingertip distance from the palm center (relative to palm size).
+    max_tip_spread: float
 
     @property
     def extended_count(self) -> int:
         return sum(self.extended.values())
 
+    @property
+    def is_fist(self) -> bool:
+        """No finger extended AND every fingertip is curled in close to the palm.
 
-def _xy(landmarks: np.ndarray, aspect: float) -> np.ndarray:
-    pts = np.asarray(landmarks, dtype=np.float64)[:, :2].copy()
+        The second check stops a finger pointed at the camera (short in 2D) from
+        being taken for a fist and freezing the cursor.
+        """
+        return self.extended_count == 0 and self.max_tip_spread < config.FIST_TIP_RATIO
+
+
+def _xyz(landmarks: np.ndarray, aspect: float) -> np.ndarray:
+    """Landmarks in isotropic units: x is rescaled by the frame aspect ratio, and z
+    (MediaPipe depth, same scale as x) too, so 3D distances are not distorted."""
+    pts = np.asarray(landmarks, dtype=np.float64)[:, :3].copy()
     pts[:, 0] *= aspect
+    pts[:, 2] *= aspect * config.DEPTH_WEIGHT
     return pts
 
 
 def compute_features(landmarks: np.ndarray, aspect: float = config.FRAME_ASPECT) -> HandFeatures:
-    pts = _xy(landmarks, aspect)
+    pts = _xyz(landmarks, aspect)
 
     def dist(a: int, b: int) -> float:
         return float(np.linalg.norm(pts[a] - pts[b]))
@@ -59,17 +73,22 @@ def compute_features(landmarks: np.ndarray, aspect: float = config.FRAME_ASPECT)
         name: dist(config.LM_WRIST, tip) > dist(config.LM_WRIST, pip) * config.FINGER_EXTENDED_RATIO
         for name, (pip, tip) in config.FINGER_JOINTS.items()
     }
+    center = pts[list(config.PALM_LANDMARKS)].mean(axis=0)
+    spread = max(
+        float(np.linalg.norm(pts[tip] - center)) for _, tip in config.FINGER_JOINTS.values()
+    ) / palm
     return HandFeatures(
         pinch_index=dist(config.LM_THUMB_TIP, config.LM_INDEX_TIP) / palm,
         pinch_middle=dist(config.LM_THUMB_TIP, config.LM_MIDDLE_TIP) / palm,
         extended=extended,
+        max_tip_spread=spread,
     )
 
 
 def classify_pose(f: HandFeatures) -> Gesture:
     """Static pose from finger states (no pinch logic, no history)."""
     e = f.extended
-    if f.extended_count == 0:
+    if f.is_fist:
         return Gesture.FIST
     if f.extended_count == 4 and f.pinch_index > config.OPEN_PALM_THUMB_RATIO:
         return Gesture.OPEN_PALM
@@ -145,7 +164,7 @@ class GestureDetector:
         # A fist brings all fingertips close to the thumb, so it must never count as
         # a pinch — checked on the raw current frame, not the debounced pose, so a
         # click cannot slip through while the fist is still being confirmed.
-        if f.extended_count == 0:
+        if f.is_fist:
             self._pinch = self._pinch_candidate = None
             self._pinch_frames = 0
             self._last = pose

@@ -104,3 +104,27 @@ def test_long_hand_loss_resets():
 def test_classify_pose_is_stateless():
     f = compute_features(POSES["two"][0])
     assert classify_pose(f) == classify_pose(f) == Gesture.TWO_FINGERS
+
+
+def test_finger_pointed_at_camera_is_not_a_fist():
+    """Foreshortened in 2D, but depth shows the finger is extended."""
+    hand = make_hand((), thumb_tip=FIST_THUMB)
+    # index finger sticks out towards the camera: tip/dip/pip in front of the palm
+    for k, depth in zip((6, 7, 8), (-0.07, -0.12, -0.16)):
+        hand[k, :2] = hand[5, :2]
+        hand[k, 2] = depth / config.FRAME_ASPECT
+    f = compute_features(hand)
+    assert f.extended["index"]
+    assert not f.is_fist
+    assert feed(GestureDetector(), hand, config.POSE_STABLE_FRAMES) != Gesture.FIST
+
+
+def test_fist_requires_fingertips_near_palm():
+    from gesture_control.gestures import HandFeatures
+
+    folded = {name: False for name in config.FINGER_JOINTS}
+    near = HandFeatures(1.0, 1.0, folded, max_tip_spread=config.FIST_TIP_RATIO * 0.5)
+    far = HandFeatures(1.0, 1.0, folded, max_tip_spread=config.FIST_TIP_RATIO * 2)
+    assert near.is_fist
+    assert not far.is_fist
+    assert classify_pose(far) != Gesture.FIST
