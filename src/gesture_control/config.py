@@ -89,6 +89,13 @@ FIST_TIP_RATIO = 0.75
 OPEN_PALM_THUMB_RATIO = 0.6
 # Static poses (fist, two fingers, palm, point) must be stable for this many frames.
 POSE_STABLE_FRAMES = 3
+# Scroll pose ("two fingers") must be held longer, so the hand passing through it on
+# the way to a click does not scroll the page.
+SCROLL_STABLE_FRAMES = 6
+# Scroll pose: index and middle fingertips held together (gap below this) ...
+SCROLL_FINGERS_TOGETHER_RATIO = 0.35
+# ... and the thumb away from the middle fingertip (not getting ready to pinch).
+SCROLL_THUMB_AWAY_RATIO = 0.7
 # The detector keeps its state through this many frames without a hand, so a single
 # dropped frame does not end a drag.
 HAND_LOST_GRACE_FRAMES = 5

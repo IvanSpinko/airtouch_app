@@ -24,7 +24,7 @@ class Gesture(str, Enum):
     POINT = "point"                # index finger extended — move the cursor
     PINCH_INDEX = "pinch_index"    # thumb + index (right button by default)
     PINCH_MIDDLE = "pinch_middle"  # thumb + middle (left button by default)
-    TWO_FINGERS = "two_fingers"    # index + middle extended — scroll
+    TWO_FINGERS = "two_fingers"    # index + middle extended together — scroll
     FIST = "fist"                  # pause
     OPEN_PALM = "open_palm"        # reserved for the on-screen keyboard (stage 4)
 
@@ -38,6 +38,8 @@ class HandFeatures:
     extended: dict[str, bool]
     # Largest fingertip distance from the palm center (relative to palm size).
     max_tip_spread: float
+    # Distance between index and middle fingertips.
+    index_middle_gap: float = 0.0
 
     @property
     def extended_count(self) -> int:
@@ -82,6 +84,7 @@ def compute_features(landmarks: np.ndarray, aspect: float = config.FRAME_ASPECT)
         pinch_middle=dist(config.LM_THUMB_TIP, config.LM_MIDDLE_TIP) / palm,
         extended=extended,
         max_tip_spread=spread,
+        index_middle_gap=dist(config.LM_INDEX_TIP, config.LM_MIDDLE_TIP) / palm,
     )
 
 
@@ -92,7 +95,13 @@ def classify_pose(f: HandFeatures) -> Gesture:
         return Gesture.FIST
     if f.extended_count == 4 and f.pinch_index > config.OPEN_PALM_THUMB_RATIO:
         return Gesture.OPEN_PALM
-    if e["index"] and e["middle"] and not e["ring"] and not e["pinky"]:
+    if (
+        e["index"] and e["middle"] and not e["ring"] and not e["pinky"]
+        # Fingers together and thumb away: otherwise this is the hand getting ready
+        # for a thumb + middle pinch, which looks the same by finger states alone.
+        and f.index_middle_gap < config.SCROLL_FINGERS_TOGETHER_RATIO
+        and f.pinch_middle > config.SCROLL_THUMB_AWAY_RATIO
+    ):
         return Gesture.TWO_FINGERS
     if e["index"]:
         return Gesture.POINT
@@ -148,7 +157,10 @@ class GestureDetector:
         else:
             self._pose_candidate = raw
             self._pose_frames = 1
-        if self._pose_frames >= config.POSE_STABLE_FRAMES:
+        needed = (
+            config.SCROLL_STABLE_FRAMES if raw is Gesture.TWO_FINGERS else config.POSE_STABLE_FRAMES
+        )
+        if self._pose_frames >= needed:
             self._pose = raw
         return self._pose
 
@@ -194,7 +206,10 @@ def _demo() -> None:
             if hand is not None:
                 draw_hand(frame, hand)
                 f = compute_features(hand.landmarks)
-                text += f"  pi={f.pinch_index:.2f} pm={f.pinch_middle:.2f}"
+                text += (
+                    f"  pi={f.pinch_index:.2f} pm={f.pinch_middle:.2f}"
+                    f" gap={f.index_middle_gap:.2f}"
+                )
             cv2.putText(
                 frame, text, config.PREVIEW_TEXT_ORIGIN, cv2.FONT_HERSHEY_SIMPLEX,
                 config.PREVIEW_FONT_SCALE, config.COLOR_TEXT_ACTIVE, config.PREVIEW_FONT_THICKNESS,
