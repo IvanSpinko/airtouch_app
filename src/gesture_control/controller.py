@@ -73,8 +73,8 @@ class GestureController:
 
     - POINT / NONE / OPEN_PALM: the cursor follows the index fingertip.
     Which pinch is the left / right button is set in config (``LEFT_BUTTON_GESTURE``,
-    ``RIGHT_BUTTON_GESTURE``); by default thumb + middle is left, so the index finger
-    that steers the cursor stays still while clicking.
+    ``RIGHT_BUTTON_GESTURE``); by default thumb + index is left and thumb + middle is
+    right. The cursor follows the index knuckle, so pinching does not move it.
 
     - left pinch: button down at the pre-pinch position; moving the hand past
       ``DRAG_START_PX`` drags; opening the pinch releases. Two quick pinches land in

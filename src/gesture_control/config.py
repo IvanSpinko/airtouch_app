@@ -100,7 +100,7 @@ POSE_STABLE_FRAMES = 3
 SCROLL_STABLE_FRAMES = 6
 # Scroll pose: index and middle fingertips held together (gap below this) ...
 SCROLL_FINGERS_TOGETHER_RATIO = 0.35
-# ... and the thumb away from the middle fingertip (not getting ready to pinch).
+# ... and the thumb away from both fingertips (not getting ready to pinch).
 SCROLL_THUMB_AWAY_RATIO = 0.7
 # The detector keeps its state through this many frames without a hand, so a single
 # dropped frame does not end a drag.
@@ -149,10 +149,10 @@ ML_TARGET_ACCURACY = 0.95
 
 # --- Mouse actions ------------------------------------------------------------
 # Which pinch acts as which mouse button ("pinch_index" or "pinch_middle").
-# Thumb + middle for the left button keeps the index finger — and so the cursor —
-# still while clicking.
-LEFT_BUTTON_GESTURE = "pinch_middle"
-RIGHT_BUTTON_GESTURE = "pinch_index"
+# The cursor follows the index knuckle, so bending the index finger for a click
+# does not move it.
+LEFT_BUTTON_GESTURE = "pinch_index"
+RIGHT_BUTTON_GESTURE = "pinch_middle"
 # Closing the pinch drags the fingertip; the click lands where the cursor was this
 # long before the pinch was recognized.
 CLICK_LOOKBACK_S = 0.15

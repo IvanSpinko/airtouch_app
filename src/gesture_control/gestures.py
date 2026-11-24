@@ -22,8 +22,8 @@ from gesture_control import config
 class Gesture(str, Enum):
     NONE = "none"
     POINT = "point"                # index finger extended — move the cursor
-    PINCH_INDEX = "pinch_index"    # thumb + index (right button by default)
-    PINCH_MIDDLE = "pinch_middle"  # thumb + middle (left button by default)
+    PINCH_INDEX = "pinch_index"    # thumb + index (left button by default)
+    PINCH_MIDDLE = "pinch_middle"  # thumb + middle (right button by default)
     TWO_FINGERS = "two_fingers"    # index + middle extended together — scroll
     FIST = "fist"                  # pause
     OPEN_PALM = "open_palm"        # reserved for the on-screen keyboard (stage 4)
@@ -156,9 +156,9 @@ def classify_pose(f: HandFeatures) -> Gesture:
     if (
         e["index"] and e["middle"] and not e["ring"] and not e["pinky"]
         # Fingers together and thumb away: otherwise this is the hand getting ready
-        # for a thumb + middle pinch, which looks the same by finger states alone.
+        # for a pinch, which looks the same by finger states alone.
         and f.index_middle_gap < config.SCROLL_FINGERS_TOGETHER_RATIO
-        and f.pinch_middle > config.SCROLL_THUMB_AWAY_RATIO
+        and min(f.pinch_index, f.pinch_middle) > config.SCROLL_THUMB_AWAY_RATIO
     ):
         return Gesture.TWO_FINGERS
     if e["index"]:

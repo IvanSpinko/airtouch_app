@@ -85,7 +85,7 @@ def draw_preview(
     if config.PREVIEW_SHOW_PINCH_DEBUG and hand is not None and features is not None:
         # Pinch distances vs the click threshold: below it = pinched.
         lines.append(
-            f"thumb-middle {features.pinch_middle:.2f}  thumb-index {features.pinch_index:.2f}"
+            f"thumb-index {features.pinch_index:.2f}  thumb-middle {features.pinch_middle:.2f}"
             f"  (click < {config.PINCH_ON_RATIO:.2f})"
         )
     ox, oy = config.PREVIEW_TEXT_ORIGIN
