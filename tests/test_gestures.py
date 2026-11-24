@@ -282,12 +282,19 @@ def test_model_agreeing_allows_pinch():
     assert feed(d, POSES["pinch_middle"][0], config.PINCH_CONFIRM_FRAMES) == Gesture.PINCH_MIDDLE
 
 
-def test_model_does_not_veto_held_pinch():
-    """Once a pinch started, it is held by distance alone (drags stay stable)."""
-    d, clf = model_detector({Gesture.PINCH_MIDDLE: 0.8})
+def test_held_pinch_survives_model_wobble_while_fingertips_touch():
+    d, clf = model_detector({Gesture.PINCH_MIDDLE: 0.95})
     feed(d, POSES["pinch_middle"][0], config.PINCH_CONFIRM_FRAMES)
-    clf.set({Gesture.POINT: 0.9})
+    clf.set({Gesture.PINCH_MIDDLE: config.CLASSIFIER_PINCH_HOLD_GATE + 0.05})
     assert feed(d, POSES["pinch_middle"][0], 5) == Gesture.PINCH_MIDDLE
+
+
+def test_held_pinch_released_when_model_sees_no_pinch_at_all():
+    """Curled hand / fist: fingertips are close, but the model says no pinch."""
+    d, clf = model_detector({Gesture.PINCH_MIDDLE: 0.95})
+    feed(d, POSES["pinch_middle"][0], config.PINCH_CONFIRM_FRAMES)
+    clf.set({Gesture.NONE: 0.95})
+    assert feed(d, POSES["pinch_middle"][0], config.PINCH_RELEASE_FRAMES) != Gesture.PINCH_MIDDLE
 
 
 def test_confident_model_decides_static_pose():
@@ -473,8 +480,10 @@ def test_strength_with_model():
     assert pinch_strength(g, touching, {g: 0.5}) == 1.0
     # fingertips touching, model disagrees: no click from the rule
     assert pinch_strength(g, touching, {g: 0.1}) == 0.1
-    # ...but an already held pinch is not dropped by the model wobble
-    assert pinch_strength(g, touching, {g: 0.1}, gate=False) == 1.0
+    # an already held pinch survives a model wobble while fingertips touch...
+    assert pinch_strength(g, touching, {g: 0.2}, gate=False) == 1.0
+    # ...but not when the model sees no pinch at all (curled hand / fist)
+    assert pinch_strength(g, touching, {g: 0.05}, gate=False) == 0.05
 
 
 def test_detector_exposes_strength_for_preview():

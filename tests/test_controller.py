@@ -376,8 +376,17 @@ def test_middle_pinch_is_right_click_end_to_end():
 
     point = make_hand(("index",))
     pinch = make_hand(("index", "middle"), thumb_tip="middle")
-    r = run_detector_and_controller([point] * 15 + [pinch] * 3 + [point] * 10)
+    r = run_detector_and_controller([point] * 15 + [pinch] * 8 + [point] * 10)
     assert r.buttons.events == [("click", "right")]
+
+
+def test_brief_middle_pinch_is_not_right_click_end_to_end():
+    from handgen import make_hand
+
+    point = make_hand(("index",))
+    pinch = make_hand(("index", "middle"), thumb_tip="middle")
+    r = run_detector_and_controller([point] * 15 + [pinch] * 3 + [point] * 10)
+    assert r.buttons.events == []
 
 
 def test_controller_reports_last_event():
@@ -388,5 +397,35 @@ def test_controller_reports_last_event():
     r.run(G.POINT)
     assert r.ctl.last_event[0] == "LEFT CLICK"
     r.run(G.POINT, seconds=0.5)
-    r.run(RIGHT, seconds=0.1)
+    r.run(RIGHT, seconds=0.3)
     assert r.ctl.last_event[0] == "RIGHT CLICK"
+
+
+
+def test_right_click_waits_for_minimum_hold():
+    r = Rig()
+    r.run(G.POINT, seconds=0.5)
+    r.run(RIGHT, seconds=config.RIGHT_CLICK_MIN_HOLD_S / 2)
+    assert r.buttons.events == []
+    r.run(RIGHT, seconds=config.RIGHT_CLICK_MIN_HOLD_S)
+    assert r.buttons.events == [("click", "right")]
+    r.run(RIGHT, seconds=1.0)  # holding longer does not repeat it
+    assert r.buttons.events == [("click", "right")]
+
+
+def test_left_button_held_still_is_auto_released():
+    r = Rig()
+    r.run(G.POINT, (0.5, 0.5), seconds=0.5)
+    r.run(LEFT, (0.5, 0.5), seconds=config.LEFT_HOLD_STILL_MAX_S + 0.2)
+    assert r.buttons.names() == ["press", "release"]
+    assert r.ctl.last_event[0] == "AUTO RELEASE"
+    r.run(G.POINT)  # opening the fingers afterwards does not release twice
+    assert r.buttons.names() == ["press", "release"]
+
+
+def test_dragging_is_never_auto_released():
+    r = Rig()
+    r.run(G.POINT, (0.3, 0.3), seconds=0.5)
+    r.run(LEFT, (0.3, 0.3), seconds=0.4)
+    r.run(LEFT, (0.6, 0.6), seconds=config.LEFT_HOLD_STILL_MAX_S + 0.5)
+    assert r.ctl.dragging and r.buttons.names() == ["press"]
