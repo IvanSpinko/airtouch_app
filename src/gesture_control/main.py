@@ -32,7 +32,7 @@ def status_line(enabled: bool, ctl: GestureController) -> tuple[str, tuple[int, 
 
 def draw_preview(
     frame: np.ndarray, hand: Hand | None, zone: WorkZone, gesture: Gesture,
-    status: tuple[str, tuple[int, int, int]], fps: float,
+    status: tuple[str, tuple[int, int, int]], fps: float, scroll_anchor: float | None = None,
 ) -> np.ndarray:
     out = frame.copy()
     h, w = out.shape[:2]
@@ -41,6 +41,14 @@ def draw_preview(
         out, (int(left * w), int(top * h)), (int(right * w), int(bottom * h)),
         config.COLOR_ZONE, config.PREVIEW_LINE_THICKNESS,
     )
+    if scroll_anchor is not None:
+        # Auto scroll: anchor line and the dead zone around it.
+        ay = int(scroll_anchor * h)
+        dz = int(config.SCROLL_AUTO_DEADZONE * h)
+        cv2.rectangle(out, (0, ay - dz), (w - 1, ay + dz), config.COLOR_SCROLL_DEADZONE,
+                      config.PREVIEW_LINE_THICKNESS)
+        cv2.line(out, (0, ay), (w - 1, ay), config.COLOR_SCROLL_ANCHOR,
+                 config.PREVIEW_LINE_THICKNESS)
     if hand is not None:
         draw_hand(out, hand)
         x, y = hand.point(config.CURSOR_LANDMARK)
@@ -110,7 +118,8 @@ def run() -> None:
                     cv2.imshow(
                         config.PREVIEW_WINDOW_NAME,
                         draw_preview(
-                            frame, hand, zone, gesture, status_line(enabled, ctl), current_fps
+                            frame, hand, zone, gesture, status_line(enabled, ctl), current_fps,
+                            ctl.scroll_anchor,
                         ),
                     )
                     if cv2.waitKey(config.PREVIEW_WAIT_KEY_MS) & 0xFF in config.PREVIEW_QUIT_KEYS:
