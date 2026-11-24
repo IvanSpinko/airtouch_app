@@ -173,7 +173,9 @@ def test_two_fingers_scroll_up_and_down():
         r.run(G.TWO_FINGERS, (0.5, 0.5 - i * 0.01))  # hand moves up
     ups = [e[1] for e in r.buttons.events if e[0] == "scroll"]
     assert ups and all(v > 0 for v in ups)
-    assert sum(ups) == pytest.approx(0.09 * config.SCROLL_TICKS_PER_FRAME, rel=0.01)
+    # total movement minus the start dead-band (+ one frame of float slack)
+    k = config.SCROLL_TICKS_PER_FRAME
+    assert (0.09 - config.SCROLL_START_RATIO - 0.01) * k <= sum(ups) <= 0.09 * k
     r.buttons.events.clear()
     for i in range(10):
         r.run(G.TWO_FINGERS, (0.5, 0.41 + i * 0.01))  # hand moves down
@@ -237,3 +239,29 @@ def test_release_all_lets_go_of_button():
 def test_default_mapping_keeps_index_finger_free_for_left_click():
     assert LEFT is G.PINCH_MIDDLE
     assert RIGHT is G.PINCH_INDEX
+
+
+def test_quick_pinch_with_hand_moving_is_click_not_drag():
+    """Hand drifts during a short pinch: must not turn into a selection drag."""
+    r = Rig()
+    r.run(G.POINT, (0.5, 0.5), seconds=1.0)
+    for i in range(int(config.DRAG_MIN_HOLD_S / DT) - 1):
+        r.run(LEFT, (0.5 + i * 0.02, 0.5))
+    assert not r.ctl.dragging
+    r.run(G.POINT, (0.6, 0.5))
+    assert r.buttons.names() == ["press", "release"]
+
+
+def test_jitter_during_long_pinch_does_not_start_drag():
+    r = Rig()
+    r.run(G.POINT, (0.5, 0.5), seconds=1.0)
+    for i in range(30):  # 1 s of pinch with +-2% raw jitter
+        r.run(LEFT, (0.5 + (0.02 if i % 2 else -0.02), 0.5))
+    assert not r.ctl.dragging
+
+
+def test_entering_scroll_pose_does_not_nudge_page():
+    r = Rig()
+    r.run(G.POINT, (0.5, 0.5), seconds=0.5)
+    r.run(G.TWO_FINGERS, (0.5, 0.5 - config.SCROLL_START_RATIO / 2), seconds=0.5)
+    assert not any(e[0] == "scroll" for e in r.buttons.events)
