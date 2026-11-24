@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual env
+.venv/
+
+# IDE
+.idea/
+.vscode/
+
+# Build
+build/
+dist/
+*.spec
+
+# Models are downloaded / trained locally
+models/*.task
+models/*.pt
+
+# Recorded gesture data stays local (privacy)
+data/*.csv
+
+# Local user settings
+settings.json
