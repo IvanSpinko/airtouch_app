@@ -111,9 +111,11 @@ RIGHT_BUTTON_GESTURE = "pinch_index"
 CLICK_LOOKBACK_S = 0.15
 # How much cursor history to keep for the lookback, s.
 CURSOR_HISTORY_S = 1.0
-# While pinched, the cursor stays put until the hand moves this far (px) —
-# then it becomes a drag.
-DRAG_START_PX = 40
+# While pinched, the cursor stays put; it becomes a drag only once the pinch has
+# been held at least DRAG_MIN_HOLD_S AND the smoothed cursor moved DRAG_START_PX.
+# A quick pinch is therefore always a clean click, never a tiny drag/selection.
+DRAG_START_PX = 60
+DRAG_MIN_HOLD_S = 0.3
 # After a click the cursor stays frozen this long (unless the hand moves more than
 # DRAG_START_PX), so two quick pinches land in one spot and make a double click.
 CLICK_SETTLE_S = 0.35
@@ -121,6 +123,9 @@ CLICK_SETTLE_S = 0.35
 # sent for smooth scrolling once at least SCROLL_MIN_TICKS accumulate.
 SCROLL_TICKS_PER_FRAME = 25.0
 SCROLL_MIN_TICKS = 0.1
+# The hand must move this much (fraction of frame height) before scrolling starts,
+# so entering the pose does not nudge the page.
+SCROLL_START_RATIO = 0.02
 # True = moving the hand up scrolls down (like dragging the page).
 SCROLL_INVERT = False
 # Holding a fist this long toggles pause.

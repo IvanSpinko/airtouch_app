@@ -78,7 +78,8 @@ class GestureController:
 
     - left pinch: button down at the pre-pinch position; moving the hand past
       ``DRAG_START_PX`` drags; opening the pinch releases. Two quick pinches land in
-      the same spot, which Windows turns into a double click.
+      the same spot, which Windows turns into a double click. Dragging needs the
+      pinch held for ``DRAG_MIN_HOLD_S``, so a quick pinch never selects anything.
     - right pinch: right click; the cursor stays put while pinched.
     - TWO_FINGERS: cursor frozen, vertical hand movement scrolls.
     - FIST held for ``FIST_HOLD_S``: toggles pause.
@@ -101,6 +102,8 @@ class GestureController:
         self._left_down = False
         self._dragging = False
         self._pinch_anchor: tuple[float, float] = (0.0, 0.0)
+        self._pinch_since = 0.0
+        self._scrolling = False
         self._settle_until = 0.0
         self._scroll_ref_y = 0.0
         self._fist_since: float | None = None
@@ -154,8 +157,8 @@ class GestureController:
         prev, self._gesture = self._gesture, gesture
         if gesture is not prev:
             self._exit(prev, t)
-            self._enter(gesture, raw, y, t)
-        self._hold(gesture, raw, y, t)
+            self._enter(gesture, y, t)
+        self._hold(gesture, y, t)
 
     # -- state machine ----------------------------------------------------------
     def _update_pause(self, gesture: Gesture, t: float) -> None:
@@ -179,13 +182,14 @@ class GestureController:
                 break
         return anchor
 
-    def _enter(self, gesture: Gesture, raw: tuple[float, float], y: float, t: float) -> None:
+    def _enter(self, gesture: Gesture, y: float, t: float) -> None:
         if gesture in (self.left_gesture, self.right_gesture):
             # Repeated pinch during the settle window reuses the same spot (double click).
             if t >= self._settle_until:
                 ax, ay = self._anchor(t)
                 self.cursor.jump_to(ax, ay)
-            self._pinch_anchor = raw
+            self._pinch_anchor = self._target
+            self._pinch_since = t
             if gesture is self.left_gesture:
                 self.buttons.press("left")
                 self._left_down = True
@@ -195,6 +199,7 @@ class GestureController:
         elif gesture is Gesture.TWO_FINGERS:
             self.cursor.stop_moving()
             self._scroll_ref_y = y
+            self._scrolling = False
 
     def _exit(self, gesture: Gesture, t: float) -> None:
         if gesture is self.left_gesture and self._left_down:
@@ -206,13 +211,16 @@ class GestureController:
         elif gesture is self.right_gesture:
             self._settle_until = t + config.CLICK_SETTLE_S
 
-    def _moved_from_anchor(self, raw: tuple[float, float]) -> bool:
-        dx, dy = raw[0] - self._pinch_anchor[0], raw[1] - self._pinch_anchor[1]
+    def _moved_from_anchor(self) -> bool:
+        # Smoothed position: raw landmarks jitter by several screen pixels per frame.
+        dx = self._target[0] - self._pinch_anchor[0]
+        dy = self._target[1] - self._pinch_anchor[1]
         return math.hypot(dx, dy) > config.DRAG_START_PX
 
-    def _hold(self, gesture: Gesture, raw: tuple[float, float], y: float, t: float) -> None:
+    def _hold(self, gesture: Gesture, y: float, t: float) -> None:
         if gesture is self.left_gesture:
-            if not self._dragging and self._moved_from_anchor(raw):
+            held = t - self._pinch_since >= config.DRAG_MIN_HOLD_S
+            if not self._dragging and held and self._moved_from_anchor():
                 self._dragging = True
             if self._dragging:
                 self.cursor.set_target(*self._target)
@@ -220,6 +228,12 @@ class GestureController:
             pass  # frozen
         elif gesture is Gesture.TWO_FINGERS:
             dy = self._scroll_ref_y - y  # hand up -> positive
+            if not self._scrolling:
+                if abs(dy) < config.SCROLL_START_RATIO:
+                    return
+                self._scrolling = True
+                self._scroll_ref_y = y  # the dead-band itself does not scroll
+                return
             ticks = dy * config.SCROLL_TICKS_PER_FRAME
             if config.SCROLL_INVERT:
                 ticks = -ticks
@@ -227,7 +241,7 @@ class GestureController:
                 self.buttons.scroll(ticks)
                 self._scroll_ref_y = y
         else:
-            if t < self._settle_until and not self._moved_from_anchor(raw):
+            if t < self._settle_until and not self._moved_from_anchor():
                 return  # keep still after a click
             self._settle_until = 0.0
             self.cursor.set_target(*self._target)
