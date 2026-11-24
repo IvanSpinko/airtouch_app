@@ -181,6 +181,7 @@ class GestureDetector:
     def __init__(self, classifier: GestureClassifier | None = None) -> None:
         self.classifier = classifier
         self.probs: dict[Gesture, float] | None = None
+        self.features: HandFeatures | None = None
         self.reset()
 
     def reset(self) -> None:
@@ -189,7 +190,7 @@ class GestureDetector:
         self._release_frames = 0
         self._last = Gesture.NONE
         self._pinch: Gesture | None = None
-        self._pinch_candidate: Gesture | None = None
+        self._pinch_votes = {g: 0 for g in PINCHES}
         self._pinch_frames = 0
         self._pose = Gesture.NONE
         self._pose_candidate = Gesture.NONE
@@ -218,15 +219,19 @@ class GestureDetector:
             )
             if self.probs is not None and self.probs.get(candidate, 0.0) < config.CLASSIFIER_PINCH_MIN_PROB:
                 candidate = None  # the model does not see a pinch here
-        if candidate is not None and candidate is self._pinch_candidate:
-            self._pinch_frames += 1
-        else:
-            self._pinch_candidate = candidate
-            self._pinch_frames = 1 if candidate is not None else 0
-        if candidate is not None and self._pinch_frames >= config.PINCH_CONFIRM_FRAMES:
-            self._pinch = candidate
-            self._pinch_candidate = None
+        if candidate is None:
             self._pinch_frames = 0
+            self._pinch_votes = {g: 0 for g in PINCHES}
+            return self._pinch
+        # Count consecutive frames of *any* pinch: with the thumb between index and
+        # middle the closer finger can flip from frame to frame, which must not
+        # restart the count. The type is decided by majority when confirmed.
+        self._pinch_frames += 1
+        self._pinch_votes[candidate] += 1
+        if self._pinch_frames >= config.PINCH_CONFIRM_FRAMES:
+            self._pinch = max(PINCHES, key=lambda g: (self._pinch_votes[g], g is candidate))
+            self._pinch_frames = 0
+            self._pinch_votes = {g: 0 for g in PINCHES}
         return self._pinch
 
     def _raw_pose(self, f: HandFeatures) -> Gesture:
@@ -260,6 +265,7 @@ class GestureDetector:
         self._lost_frames = 0
         self._seen_frames += 1
         f = compute_features(landmarks)
+        self.features = f
         self.probs = self.classifier.predict(landmarks, handedness) if self.classifier else None
         pose = self._update_pose(f)
         # A fist brings all fingertips close to the thumb, so it must never count as
@@ -269,7 +275,8 @@ class GestureDetector:
             self.probs.get(Gesture.FIST, 0.0) >= config.CLASSIFIER_MIN_PROB
         )
         if f.is_fist or model_fist:
-            self._pinch = self._pinch_candidate = None
+            self._pinch = None
+            self._pinch_votes = {g: 0 for g in PINCHES}
             self._pinch_frames = 0
             self._last = pose
             return pose

@@ -79,9 +79,10 @@ PALM_LANDMARKS = (LM_WRIST, LM_INDEX_MCP, LM_MIDDLE_MCP, LM_RING_MCP, LM_PINKY_M
 # Pinch hysteresis: starts below ON, ends above OFF.
 PINCH_ON_RATIO = 0.25
 PINCH_OFF_RATIO = 0.38
-# Frames a pinch must be seen before it counts (filters short glitches). The click
-# still lands at the pre-pinch spot thanks to CLICK_LOOKBACK_S.
-PINCH_CONFIRM_FRAMES = 3
+# Consecutive pinch frames before it counts (filters single-frame glitches). Keep
+# this small: a quick tap lasts only 2-3 frames. The click still lands at the
+# pre-pinch spot thanks to CLICK_LOOKBACK_S.
+PINCH_CONFIRM_FRAMES = 2
 # Frames the fingers must stay open before a pinch is released (debounce).
 PINCH_RELEASE_FRAMES = 2
 # After the hand (re)appears, no new pinch for this many frames.
