@@ -269,8 +269,23 @@ HOTKEY_TOGGLE = "<ctrl>+<alt>+g"
 
 # --- Preview window (debug, until the PyQt overlay exists) --------------------
 SHOW_PREVIEW = True
-# Show thumb-finger pinch distances in the preview (helps tune PINCH_ON_RATIO).
-PREVIEW_SHOW_PINCH_DEBUG = True
+# Show raw thumb-fingertip distances in the preview (for tuning PINCH_ON/OFF_RATIO).
+PREVIEW_SHOW_PINCH_DEBUG = False
+# Pinch strength bars (bottom-left of the preview): size in px and colors.
+PREVIEW_METER_WIDTH = 160
+PREVIEW_METER_HEIGHT = 14
+PREVIEW_METER_GAP = 8
+PREVIEW_METER_MARGIN = 12
+COLOR_METER_BG = (60, 60, 60)
+COLOR_METER_FILL = (200, 200, 200)
+COLOR_METER_ACTIVE = (0, 255, 0)
+COLOR_METER_ON = (0, 255, 255)
+COLOR_METER_OFF = (0, 140, 255)
+# How long the last mouse action ("LEFT CLICK", ...) stays on screen, s.
+PREVIEW_EVENT_FLASH_S = 0.7
+PREVIEW_EVENT_FONT_SCALE = 1.2
+PREVIEW_EVENT_THICKNESS = 3
+COLOR_EVENT = (0, 255, 255)
 PREVIEW_WINDOW_NAME = "AirTouch preview"
 PREVIEW_QUIT_KEYS = (ord("q"), 27)  # q or Esc
 PREVIEW_WAIT_KEY_MS = 1

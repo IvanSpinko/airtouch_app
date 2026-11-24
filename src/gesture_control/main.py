@@ -22,6 +22,12 @@ from gesture_control.mouse import (
 from gesture_control.tracker import Hand, HandTracker, draw_hand, near_edges
 
 
+def recent_event(ctl: GestureController, now: float) -> str | None:
+    if ctl.last_event and now - ctl.last_event[1] <= config.PREVIEW_EVENT_FLASH_S:
+        return ctl.last_event[0]
+    return None
+
+
 def status_line(enabled: bool, ctl: GestureController) -> tuple[str, tuple[int, int, int]]:
     if not enabled:
         return f"Control: OFF ({config.HOTKEY_TOGGLE})", config.COLOR_TEXT_PAUSED
@@ -44,10 +50,47 @@ def draw_edge_warning(frame: np.ndarray, sides: set[str]) -> None:
         cv2.rectangle(frame, *bars[side], config.COLOR_EDGE_WARN, cv2.FILLED)
 
 
+def draw_pinch_meters(
+    frame: np.ndarray, strength: dict[Gesture, float], held: Gesture,
+    left: Gesture, right: Gesture,
+) -> None:
+    """Pinch strength bars: the button goes down when a bar crosses the yellow
+    line (PINCH_STRENGTH_ON) and up when it falls below the orange one (OFF)."""
+    h = frame.shape[0]
+    w, bh, gap, m = (config.PREVIEW_METER_WIDTH, config.PREVIEW_METER_HEIGHT,
+                     config.PREVIEW_METER_GAP, config.PREVIEW_METER_MARGIN)
+    label_w = 2 * m + 10
+    for row, (name, g) in enumerate((("L", left), ("R", right))):
+        y = h - m - (2 - row) * bh - (1 - row) * gap
+        x = label_w
+        cv2.putText(frame, name, (m, y + bh - 2), cv2.FONT_HERSHEY_SIMPLEX,
+                    config.PREVIEW_FONT_SCALE, config.COLOR_BONE, config.PREVIEW_FONT_THICKNESS)
+        cv2.rectangle(frame, (x, y), (x + w, y + bh), config.COLOR_METER_BG, cv2.FILLED)
+        fill = int(w * min(max(strength.get(g, 0.0), 0.0), 1.0))
+        color = config.COLOR_METER_ACTIVE if held is g else config.COLOR_METER_FILL
+        cv2.rectangle(frame, (x, y), (x + fill, y + bh), color, cv2.FILLED)
+        for level, c in ((config.PINCH_STRENGTH_ON, config.COLOR_METER_ON),
+                         (config.PINCH_STRENGTH_OFF, config.COLOR_METER_OFF)):
+            lx = x + int(w * level)
+            cv2.line(frame, (lx, y - 2), (lx, y + bh + 2), c, 2)
+
+
+def draw_event(frame: np.ndarray, text: str) -> None:
+    """Big flash of the last mouse action at the top center of the preview."""
+    (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX,
+                                  config.PREVIEW_EVENT_FONT_SCALE, config.PREVIEW_EVENT_THICKNESS)
+    x = (frame.shape[1] - tw) // 2
+    y = th + config.PREVIEW_METER_MARGIN
+    cv2.putText(frame, text, (x, y), cv2.FONT_HERSHEY_SIMPLEX, config.PREVIEW_EVENT_FONT_SCALE,
+                config.COLOR_EVENT, config.PREVIEW_EVENT_THICKNESS)
+
+
 def draw_preview(
     frame: np.ndarray, hand: Hand | None, zone: WorkZone, gesture: Gesture,
     status: tuple[str, tuple[int, int, int]], fps: float, scroll_anchor: float | None = None,
     model_conf: float | None = None, features: HandFeatures | None = None,
+    meters: tuple[dict[Gesture, float], Gesture, Gesture, Gesture] | None = None,
+    event: str | None = None,
 ) -> np.ndarray:
     out = frame.copy()
     h, w = out.shape[:2]
@@ -86,8 +129,11 @@ def draw_preview(
         # Pinch distances vs the click threshold: below it = pinched.
         lines.append(
             f"thumb-index {features.pinch_index:.2f}  thumb-middle {features.pinch_middle:.2f}"
-            f"  (click < {config.PINCH_ON_RATIO:.2f})"
         )
+    if meters is not None and hand is not None:
+        draw_pinch_meters(out, *meters)
+    if event:
+        draw_event(out, event)
     ox, oy = config.PREVIEW_TEXT_ORIGIN
     for i, line in enumerate(lines):
         cv2.putText(
@@ -152,6 +198,8 @@ def run() -> None:
                             ctl.scroll_anchor,
                             max(detector.probs.values()) if detector.probs and hand else None,
                             detector.features,
+                            (detector.strength, gesture, ctl.left_gesture, ctl.right_gesture),
+                            recent_event(ctl, ts),
                         ),
                     )
                     if cv2.waitKey(config.PREVIEW_WAIT_KEY_MS) & 0xFF in config.PREVIEW_QUIT_KEYS:
