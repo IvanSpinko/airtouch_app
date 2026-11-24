@@ -19,6 +19,8 @@ dist/
 # Models are downloaded / trained locally
 models/*.task
 models/*.pt
+# Held-out test landmarks are derived from personal recordings
+models/test_split.npz
 
 # Recorded gesture data stays local (privacy)
 data/*.csv
