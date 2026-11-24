@@ -15,7 +15,7 @@ import numpy as np
 from gesture_control import config
 from gesture_control.camera import Camera, FpsCounter
 from gesture_control.controller import ControlState, GestureController, HotkeyListener
-from gesture_control.gestures import Gesture, GestureDetector
+from gesture_control.gestures import Gesture, GestureClassifier, GestureDetector
 from gesture_control.mouse import (
     CursorAnimator, CursorMapper, Mouse, WorkZone, enable_dpi_awareness, screen_size,
 )
@@ -47,6 +47,7 @@ def draw_edge_warning(frame: np.ndarray, sides: set[str]) -> None:
 def draw_preview(
     frame: np.ndarray, hand: Hand | None, zone: WorkZone, gesture: Gesture,
     status: tuple[str, tuple[int, int, int]], fps: float, scroll_anchor: float | None = None,
+    model_conf: float | None = None,
 ) -> np.ndarray:
     out = frame.copy()
     h, w = out.shape[:2]
@@ -78,7 +79,7 @@ def draw_preview(
     lines = [
         f"FPS: {fps:.1f}",
         f"Hand: {hand.handedness if hand else '-'}",
-        f"Gesture: {gesture.value}",
+        f"Gesture: {gesture.value}" + (f" ({model_conf:.0%})" if model_conf is not None else ""),
         text,
     ]
     ox, oy = config.PREVIEW_TEXT_ORIGIN
@@ -99,13 +100,15 @@ def run() -> None:
     # Relative mode continues from wherever the real cursor is.
     mapper = CursorMapper(width, height, zone, position_source=lambda: mouse.position)
     animator = CursorAnimator(mouse)
-    detector = GestureDetector()
+    classifier = GestureClassifier.load_if_available()
+    detector = GestureDetector(classifier)
     ctl = GestureController(mapper, animator, mouse)
     state = ControlState()
     state.subscribe(lambda on: print("Control", "enabled" if on else "disabled"))
     fps = FpsCounter()
 
     print(f"Screen {width}x{height}. {config.HOTKEY_TOGGLE} toggles control, q/Esc quits.")
+    print("Gestures:", "trained classifier + rules" if classifier else "rules only (no model yet)")
     was_enabled = True
     gesture = Gesture.NONE
     with Camera() as cam, HandTracker() as tracker, HotkeyListener(state), animator:
@@ -122,7 +125,10 @@ def run() -> None:
                     if not was_enabled:
                         # Re-enabling must not glide the cursor in from a stale spot.
                         mapper.reset()
-                    gesture = detector.update(hand.landmarks if hand else None)
+                    gesture = detector.update(
+                        hand.landmarks if hand else None,
+                        hand.handedness if hand else "Right",
+                    )
                     point = hand.cursor_point() if hand else None
                     ctl.update(gesture, point, ts)
                 elif was_enabled:
@@ -138,6 +144,7 @@ def run() -> None:
                         draw_preview(
                             frame, hand, zone, gesture, status_line(enabled, ctl), current_fps,
                             ctl.scroll_anchor,
+                            max(detector.probs.values()) if detector.probs and hand else None,
                         ),
                     )
                     if cv2.waitKey(config.PREVIEW_WAIT_KEY_MS) & 0xFF in config.PREVIEW_QUIT_KEYS:
