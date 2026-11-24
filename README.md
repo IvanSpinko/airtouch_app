@@ -76,8 +76,8 @@ Tuning in `config.py`:
 - acceleration kicks in too early / late → `ACCEL_LOW_SPEED_PX_S` / `ACCEL_HIGH_SPEED_PX_S`.
 
 `CURSOR_MODE = "absolute"` restores the old behaviour: a blue work-zone rectangle is shown in
-the preview and stretched
-over the whole screen and a hand position always maps to the same screen point.
+the preview and stretched over the whole screen, so a hand position always maps to the same
+screen point.
 
 ## Gestures
 
