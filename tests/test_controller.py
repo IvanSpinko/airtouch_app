@@ -47,6 +47,8 @@ from gesture_control.mouse import CursorMapper, WorkZone  # noqa: E402
 
 W, H = 1000, 1000
 DT = 1 / 30
+LEFT = G(config.LEFT_BUTTON_GESTURE)
+RIGHT = G(config.RIGHT_BUTTON_GESTURE)
 
 
 class FakeCursor:
@@ -113,7 +115,7 @@ def test_pinch_is_click_at_pre_pinch_position():
     r.run(G.POINT, (0.5, 0.5), seconds=1.0)
     # fingertip drifts while closing the pinch
     r.run(G.POINT, (0.52, 0.52), seconds=DT)
-    r.run(G.PINCH_INDEX, (0.52, 0.52), seconds=0.1)
+    r.run(LEFT, (0.52, 0.52), seconds=0.1)
     r.run(G.POINT, (0.52, 0.52), seconds=DT)
     assert r.buttons.names() == ["press", "release"]
     jump = next(e for e in r.cursor.events if e[0] == "jump")
@@ -123,7 +125,7 @@ def test_pinch_is_click_at_pre_pinch_position():
 def test_cursor_stays_still_after_click_then_resumes():
     r = Rig()
     r.run(G.POINT, (0.5, 0.5), seconds=1.0)
-    r.run(G.PINCH_INDEX, (0.5, 0.5), seconds=0.1)
+    r.run(LEFT, (0.5, 0.5), seconds=0.1)
     n = len(r.cursor.events)
     r.run(G.POINT, (0.51, 0.5), seconds=config.CLICK_SETTLE_S / 2)  # small drift
     assert not any(e[0] == "target" for e in r.cursor.events[n:])
@@ -134,9 +136,9 @@ def test_cursor_stays_still_after_click_then_resumes():
 def test_two_quick_pinches_make_double_click_in_one_spot():
     r = Rig()
     r.run(G.POINT, (0.5, 0.5), seconds=1.0)
-    r.run(G.PINCH_INDEX, seconds=0.1)
+    r.run(LEFT, seconds=0.1)
     r.run(G.POINT, seconds=0.1)
-    r.run(G.PINCH_INDEX, seconds=0.1)
+    r.run(LEFT, seconds=0.1)
     r.run(G.POINT, seconds=0.1)
     assert r.buttons.names() == ["press", "release", "press", "release"]
     jumps = [e for e in r.cursor.events if e[0] == "jump"]
@@ -146,9 +148,9 @@ def test_two_quick_pinches_make_double_click_in_one_spot():
 def test_holding_pinch_and_moving_drags():
     r = Rig()
     r.run(G.POINT, (0.3, 0.3), seconds=1.0)
-    r.run(G.PINCH_INDEX, (0.3, 0.3), seconds=0.2)
+    r.run(LEFT, (0.3, 0.3), seconds=0.2)
     assert not r.ctl.dragging
-    r.run(G.PINCH_INDEX, (0.6, 0.6), seconds=0.5)
+    r.run(LEFT, (0.6, 0.6), seconds=0.5)
     assert r.ctl.dragging
     assert r.buttons.names() == ["press"]
     assert r.cursor.target[0] > 0.45 * W
@@ -156,10 +158,10 @@ def test_holding_pinch_and_moving_drags():
     assert r.buttons.names() == ["press", "release"]
 
 
-def test_right_click_on_middle_pinch():
+def test_right_click_pinch():
     r = Rig()
     r.run(G.POINT, seconds=0.5)
-    r.run(G.PINCH_MIDDLE, seconds=0.3)
+    r.run(RIGHT, seconds=0.3)
     r.run(G.POINT)
     assert r.buttons.events == [("click", "right")]
 
@@ -192,7 +194,7 @@ def test_fist_hold_toggles_pause():
     r.run(G.FIST, seconds=config.FIST_HOLD_S + 0.1)
     assert r.ctl.paused
     n = len(r.cursor.events)
-    r.run(G.PINCH_INDEX, seconds=0.3)
+    r.run(LEFT, seconds=0.3)
     r.run(G.POINT, (0.1, 0.1), seconds=0.3)
     assert r.buttons.events == [] and not any(e[0] == "target" for e in r.cursor.events[n:])
     r.run(G.FIST, seconds=config.FIST_HOLD_S + 0.1)
@@ -215,18 +217,23 @@ def test_short_fist_does_not_pause():
 def test_lost_hand_releases_held_button():
     r = Rig()
     r.run(G.POINT, seconds=0.5)
-    r.run(G.PINCH_INDEX, seconds=0.2)
-    r.run(G.PINCH_INDEX, point=None, seconds=config.HAND_LOST_RELEASE_S / 2)
+    r.run(LEFT, seconds=0.2)
+    r.run(LEFT, point=None, seconds=config.HAND_LOST_RELEASE_S / 2)
     assert r.buttons.names() == ["press"]  # brief dropout keeps the drag
-    r.run(G.PINCH_INDEX, point=None, seconds=config.HAND_LOST_RELEASE_S)
+    r.run(LEFT, point=None, seconds=config.HAND_LOST_RELEASE_S)
     assert r.buttons.names() == ["press", "release"]
 
 
 def test_release_all_lets_go_of_button():
     r = Rig()
     r.run(G.POINT, seconds=0.5)
-    r.run(G.PINCH_INDEX, seconds=0.2)
+    r.run(LEFT, seconds=0.2)
     r.ctl.release_all()
     assert r.buttons.names() == ["press", "release"]
     r.ctl.release_all()
     assert r.buttons.names() == ["press", "release"]
+
+
+def test_default_mapping_keeps_index_finger_free_for_left_click():
+    assert LEFT is G.PINCH_MIDDLE
+    assert RIGHT is G.PINCH_INDEX
