@@ -243,3 +243,75 @@ def test_normalize_shape_and_anchor():
     assert f.shape == (config.NUM_LANDMARKS, 3)
     assert np.allclose(f[config.LM_WRIST], 0.0)
     assert np.allclose(f[config.LM_MIDDLE_MCP, :2], (0.0, -1.0), atol=1e-5)
+
+
+# -- detector with a trained classifier ---------------------------------------------
+class FakeClassifier:
+    """Returns fixed probabilities: {gesture: prob}, the rest share what is left."""
+
+    def __init__(self, probs):
+        self.set(probs)
+
+    def set(self, probs):
+        rest = (1.0 - sum(probs.values())) / (len(Gesture) - len(probs))
+        self.probs = {g: probs.get(g, rest) for g in Gesture}
+
+    def predict(self, landmarks, handedness="Right"):
+        return dict(self.probs)
+
+
+def model_detector(probs):
+    clf = FakeClassifier(probs)
+    d = GestureDetector(clf)
+    feed(d, make_hand(("index",)), config.ACQUIRE_GRACE_FRAMES + 1)
+    return d, clf
+
+
+def test_model_veto_blocks_threshold_pinch():
+    d, _ = model_detector({Gesture.POINT: 0.9})
+    seen = [d.update(POSES["pinch_middle"][0]) for _ in range(10)]
+    assert Gesture.PINCH_MIDDLE not in seen
+
+
+def test_model_agreeing_allows_pinch():
+    d, clf = model_detector({Gesture.POINT: 0.9})
+    clf.set({Gesture.PINCH_MIDDLE: 0.8})
+    assert feed(d, POSES["pinch_middle"][0], config.PINCH_CONFIRM_FRAMES) == Gesture.PINCH_MIDDLE
+
+
+def test_model_does_not_veto_held_pinch():
+    """Once a pinch started, it is held by distance alone (drags stay stable)."""
+    d, clf = model_detector({Gesture.PINCH_MIDDLE: 0.8})
+    feed(d, POSES["pinch_middle"][0], config.PINCH_CONFIRM_FRAMES)
+    clf.set({Gesture.POINT: 0.9})
+    assert feed(d, POSES["pinch_middle"][0], 5) == Gesture.PINCH_MIDDLE
+
+
+def test_confident_model_decides_static_pose():
+    # rules see a pointing hand, the model is sure it is an open palm
+    d, _ = model_detector({Gesture.OPEN_PALM: 0.95})
+    assert feed(d, POSES["point"][0], STABLE) == Gesture.OPEN_PALM
+
+
+def test_unsure_model_falls_back_to_rules():
+    d, _ = model_detector({Gesture.OPEN_PALM: 0.3, Gesture.FIST: 0.3})
+    assert feed(d, POSES["two"][0], STABLE) == Gesture.TWO_FINGERS
+
+
+def test_model_fist_suppresses_pinch():
+    d, _ = model_detector({Gesture.FIST: 0.9})
+    seen = [d.update(POSES["pinch_middle"][0]) for _ in range(10)]
+    assert Gesture.PINCH_MIDDLE not in seen and seen[-1] == Gesture.FIST
+
+
+def test_detector_passes_handedness_to_model():
+    calls = []
+
+    class Spy(FakeClassifier):
+        def predict(self, landmarks, handedness="Right"):
+            calls.append(handedness)
+            return super().predict(landmarks, handedness)
+
+    d = GestureDetector(Spy({Gesture.POINT: 0.9}))
+    d.update(make_hand(("index",)), "Left")
+    assert calls == ["Left"]
