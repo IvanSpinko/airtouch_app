@@ -60,6 +60,23 @@ Tuning (all in `src/gesture_control/config.py`):
 - the cursor lags behind fast moves → raise `FILTER_BETA`;
 - hard to reach the edges / arm gets tired → shrink the `WORK_ZONE_*` rectangle or raise `CURSOR_SENSITIVITY`.
 
+## Cursor modes
+
+By default the cursor works like a mouse with pointer acceleration (`CURSOR_MODE = "relative"`):
+
+- **slow** hand movement moves the cursor slowly — for precise aiming at small targets;
+- a **quick flick** sends it across the screen;
+- lowering the hand and raising it somewhere else does not move the cursor (like lifting a mouse).
+
+Tuning in `config.py`:
+
+- still too sensitive when aiming → lower `ACCEL_MIN_GAIN` (e.g. `0.15`);
+- too slow to cross the screen → raise `ACCEL_MAX_GAIN`;
+- acceleration kicks in too early / late → `ACCEL_LOW_SPEED_PX_S` / `ACCEL_HIGH_SPEED_PX_S`.
+
+`CURSOR_MODE = "absolute"` restores the old behaviour: the blue rectangle is stretched
+over the whole screen and a hand position always maps to the same screen point.
+
 ## Gestures
 
 | Action         | Gesture                                                      |
