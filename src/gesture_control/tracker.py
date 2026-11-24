@@ -8,16 +8,21 @@ Check: ``python -m gesture_control.tracker`` shows a window with hand landmarks.
 
 from __future__ import annotations
 
+import os
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-import cv2
-import mediapipe as mp
-import numpy as np
-from mediapipe.tasks.python import BaseOptions, vision
-
 from gesture_control import config
+
+# Silence MediaPipe / TFLite info logs; must be set before mediapipe is imported.
+for _name, _level in config.NATIVE_LOG_LEVELS.items():
+    os.environ.setdefault(_name, _level)
+
+import cv2  # noqa: E402
+import mediapipe as mp  # noqa: E402
+import numpy as np  # noqa: E402
+from mediapipe.tasks.python import BaseOptions, vision  # noqa: E402
 
 # Landmark connections used to draw the hand skeleton.
 HAND_CONNECTIONS = (
