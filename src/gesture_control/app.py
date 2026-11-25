@@ -64,6 +64,9 @@ class TrayApp:
         self.act_preview = self._action(menu, "Show camera window", self.toggle_preview, True)
         self.act_indicator = self._action(menu, "Show indicator", self.toggle_indicator, True)
         menu.addSeparator()
+        self._action(menu, "Calibrate...", self.open_calibration)
+        self._action(menu, "Settings...", self.open_settings)
+        menu.addSeparator()
         self._action(menu, "Quit", self.quit)
         self.menu = menu
         return menu
@@ -90,10 +93,27 @@ class TrayApp:
         config.SHOW_INDICATOR = not config.SHOW_INDICATOR
         self.indicator.setVisible(config.SHOW_INDICATOR)
 
+    def open_settings(self) -> None:
+        from gesture_control.dialogs import SettingsDialog
+
+        self._dialog = SettingsDialog(on_saved=self.restart_engine)
+        self._dialog.show()
+
+    def open_calibration(self) -> None:
+        from gesture_control.dialogs import CalibrationDialog
+        from gesture_control.mouse import enable_dpi_awareness, screen_size
+
+        enable_dpi_awareness()
+        self._dialog = CalibrationDialog(self.engine, screen_size(), on_saved=self.restart_engine)
+        self._dialog.show()
+
     def restart_engine(self) -> None:
         """Applies settings that are read when the engine starts (camera, filters...)."""
+        enabled = self.engine.state.enabled
         self.engine.stop(timeout=config.ENGINE_STOP_TIMEOUT_S)
-        self.engine = Engine(log=self.log).start()
+        self.engine = Engine(log=self.log)
+        self.engine.state.set_enabled(enabled)
+        self.engine.start()
 
     def quit(self) -> None:
         self.timer.stop()
