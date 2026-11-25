@@ -89,9 +89,9 @@ screen point.
 | Action         | Gesture                                                      |
 |----------------|--------------------------------------------------------------|
 | Move cursor    | point with the index finger                                  |
-| Left click     | quick pinch: thumb + **index** finger                        |
+| Left click     | quick pinch: thumb + **index** finger (clicks when you open) |
 | Double click   | two quick thumb + index pinches                              |
-| Drag           | thumb + index pinch, hold ~0.3 s, then move; open to drop    |
+| Drag           | thumb + index pinch, hold still ~0.4 s (`DRAG READY`), move, open to drop |
 | Right click    | pinch: thumb + **middle** finger                             |
 | Scroll         | index + middle **held together**, thumb tucked, ring + pinky folded; then hold the hand above / below that spot (auto scroll) |
 | Pause / resume | hold a fist for ~1 s                                         |
@@ -106,6 +106,12 @@ Each pinch has a **strength** from 0 to 100%, shown as the `L` (left button) and
 - it goes **up** when the bar falls below the **orange** line (`PINCH_STRENGTH_OFF`, 30%);
 - the bar turns green while the button is held, and the action (`LEFT CLICK`, `DRAG`,
   `RIGHT CLICK`, `PAUSED`...) flashes at the top.
+
+**Left click fires when the fingers open** (`CLICK_MODE = "release"`): a quick pinch never
+holds the button down, so a false pinch cannot drag a window or select text. To drag, hold
+the pinch still until `DRAG READY` flashes — only then is the button pressed. While a pinch
+is building up (bar above half), the cursor stops, so the click lands where you aimed.
+`CLICK_MODE = "press"` restores pressing the button as soon as the pinch is recognized.
 
 With a trained model the strength is the model's confidence in the pinch, or 100% when the
 fingertips touch and the model at least half agrees. Without a model it is the fingertip
