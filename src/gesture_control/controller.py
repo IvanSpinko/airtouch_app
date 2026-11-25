@@ -76,10 +76,14 @@ class GestureController:
     ``RIGHT_BUTTON_GESTURE``); by default thumb + index is left and thumb + middle is
     right. The cursor follows the index knuckle, so pinching does not move it.
 
-    - left pinch: button down at the pre-pinch position; moving the hand past
-      ``DRAG_START_PX`` drags; opening the pinch releases. Two quick pinches land in
-      the same spot, which Windows turns into a double click. Dragging needs the
-      pinch held for ``DRAG_MIN_HOLD_S``, so a quick pinch never selects anything.
+    - left pinch, ``CLICK_MODE`` "release" (default): a quick pinch clicks when the
+      fingers open — the button is not held, so a false pinch cannot drag or
+      select. Holding the pinch for ``DRAG_ARM_S`` presses the button ("DRAG
+      READY"); moving past ``DRAG_START_PX`` then drags; opening drops.
+      ``CLICK_MODE`` "press": button down at once, drag after ``DRAG_MIN_HOLD_S``.
+      Two quick pinches land in the same spot -> Windows double click.
+    - while any pinch is building up (``pinch_level`` >= CURSOR_FREEZE_PINCH_LEVEL)
+      the cursor stops, so clicks land where aimed.
     - right pinch: right click; the cursor stays put while pinched.
     - TWO_FINGERS: cursor frozen; scrolls by hand offset from where the pose started
       (``SCROLL_MODE`` "auto", like a pressed mouse wheel) or by hand movement ("drag").
@@ -107,6 +111,9 @@ class GestureController:
         self._pinch_anchor: tuple[float, float] = (0.0, 0.0)
         self._pinch_since = 0.0
         self._right_fired = False
+        self._press_since = 0.0
+        self._left_auto_released = False
+        self._pinch_level = 0.0
         self._scrolling = False
         self._settle_until = 0.0
         self._scroll_ref_y = 0.0
@@ -133,8 +140,13 @@ class GestureController:
         self._gesture = Gesture.NONE
         self.cursor.stop_moving()
 
-    def update(self, gesture: Gesture, point: tuple[float, float] | None, t: float) -> None:
-        """Processes one frame. ``point`` is the normalized cursor landmark or None."""
+    def update(
+        self, gesture: Gesture, point: tuple[float, float] | None, t: float,
+        pinch_level: float = 0.0,
+    ) -> None:
+        """Processes one frame. ``point`` is the normalized cursor landmark or None;
+        ``pinch_level`` is the strongest current pinch strength (0..1)."""
+        self._pinch_level = pinch_level
         if point is None:
             if self._last_seen is not None and t - self._last_seen > config.HAND_LOST_RELEASE_S:
                 if self._left_down or self._gesture is not Gesture.NONE:
@@ -201,10 +213,12 @@ class GestureController:
             self._pinch_anchor = self._target
             self._pinch_since = t
             if gesture is self.left_gesture:
-                self.buttons.press("left")
-                self._left_down = True
                 self._dragging = False
-                self._event("LEFT DOWN", t)
+                self._left_auto_released = False
+                if config.CLICK_MODE == "press":
+                    self._press_left(t, "LEFT DOWN")
+                # "release" mode: nothing pressed yet — a tap clicks in _exit,
+                # holding presses in _hold after DRAG_ARM_S
             else:
                 self._right_fired = False  # fires in _hold after RIGHT_CLICK_MIN_HOLD_S
         elif gesture is Gesture.TWO_FINGERS:
@@ -214,6 +228,12 @@ class GestureController:
             self._scroll_acc = 0.0
             self._scrolling = False
 
+    def _press_left(self, t: float, label: str) -> None:
+        self.buttons.press("left")
+        self._left_down = True
+        self._press_since = t
+        self._event(label, t)
+
     def _exit(self, gesture: Gesture, t: float) -> None:
         if gesture is self.left_gesture and self._left_down:
             self.buttons.release("left")
@@ -222,6 +242,12 @@ class GestureController:
             if not self._dragging:
                 self._settle_until = t + config.CLICK_SETTLE_S
             self._dragging = False
+        elif (gesture is self.left_gesture and config.CLICK_MODE == "release"
+              and not self._left_auto_released):
+            # A tap: click on release; the button was never held down.
+            self.buttons.click("left")
+            self._event("LEFT CLICK", t)
+            self._settle_until = t + config.CLICK_SETTLE_S
         elif gesture is self.right_gesture and self._right_fired:
             self._settle_until = t + config.CLICK_SETTLE_S
 
@@ -234,14 +260,19 @@ class GestureController:
     def _hold(self, gesture: Gesture, y: float, t: float) -> None:
         if gesture is self.left_gesture:
             if not self._left_down:
-                return  # auto-released below; wait for the fingers to open
+                if self._left_auto_released:
+                    return  # wait for the fingers to open
+                if config.CLICK_MODE == "release" and t - self._pinch_since >= config.DRAG_ARM_S:
+                    self._press_left(t, "DRAG READY")
+                return  # cursor stays frozen while the pinch is held
             held = t - self._pinch_since >= config.DRAG_MIN_HOLD_S
             if not self._dragging and held and self._moved_from_anchor():
                 self._dragging = True
                 self._event("DRAG", t)
-            if not self._dragging and t - self._pinch_since >= config.LEFT_HOLD_STILL_MAX_S:
+            if not self._dragging and t - self._press_since >= config.LEFT_HOLD_STILL_MAX_S:
                 self.buttons.release("left")
                 self._left_down = False
+                self._left_auto_released = True
                 self._event("AUTO RELEASE", t)
                 return
             if self._dragging:
@@ -270,6 +301,8 @@ class GestureController:
                 self.buttons.scroll(ticks)
                 self._scroll_ref_y = y
         else:
+            if self._pinch_level >= config.CURSOR_FREEZE_PINCH_LEVEL:
+                return  # a pinch is building up: hold the cursor where it aims
             if t < self._settle_until and not self._moved_from_anchor():
                 return  # keep still after a click
             self._settle_until = 0.0

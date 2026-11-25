@@ -170,6 +170,16 @@ CURSOR_HISTORY_S = 1.0
 # A quick pinch is therefore always a clean click, never a tiny drag/selection.
 DRAG_START_PX = 60
 DRAG_MIN_HOLD_S = 0.3
+# Left click style:
+# "release": a quick pinch clicks when the fingers open, the button is never held
+#            down by it — a false pinch cannot drag or select. Holding the pinch
+#            still for DRAG_ARM_S presses the button ("DRAG READY") for dragging.
+# "press":   the button goes down as soon as the pinch is recognized.
+CLICK_MODE = "release"
+DRAG_ARM_S = 0.4
+# While a pinch is building up (strength at least this), the cursor stops moving,
+# so the click lands where you aimed and nothing gets selected on the way.
+CURSOR_FREEZE_PINCH_LEVEL = 0.5
 # Safety: a left button held this long without dragging is released (prevents a
 # stuck button from an accidental press).
 LEFT_HOLD_STILL_MAX_S = 2.0
