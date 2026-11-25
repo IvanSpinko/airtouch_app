@@ -31,11 +31,16 @@ def native_stderr_silenced():
     created, on the first frames and on close; Python-level logging settings and
     env vars do not reach them.
     """
-    if not config.SILENCE_NATIVE_LOGS:
+    if not config.SILENCE_NATIVE_LOGS or sys.stderr is None:
+        # windowed .exe: there is no console and no stderr to silence
         yield
         return
     sys.stderr.flush()
-    saved = os.dup(2)
+    try:
+        saved = os.dup(2)
+    except OSError:
+        yield
+        return
     devnull = os.open(os.devnull, os.O_WRONLY)
     try:
         os.dup2(devnull, 2)

@@ -4,16 +4,25 @@ Project rule: no magic numbers in other modules — they live here only.
 """
 
 import os
+import sys
 from pathlib import Path
 
 # --- Paths --------------------------------------------------------------------
 APP_NAME = "AirTouch"
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-MODELS_DIR = PROJECT_ROOT / "models"
-DATA_DIR = PROJECT_ROOT / "data"
-# Per-user files of the installed app (settings).
+# Per-user files of the installed app (settings, logs of the .exe).
 APP_DATA_DIR = Path(os.environ.get("APPDATA", Path.home())) / APP_NAME
 SETTINGS_PATH = APP_DATA_DIR / "settings.json"
+# Running as the PyInstaller-built AirTouch.exe: models are unpacked next to the
+# code (sys._MEIPASS) and there is no project folder to write data into.
+FROZEN = getattr(sys, "frozen", False)
+if FROZEN:
+    PROJECT_ROOT = Path(getattr(sys, "_MEIPASS", Path(sys.executable).parent))
+    MODELS_DIR = PROJECT_ROOT / "models"
+    DATA_DIR = APP_DATA_DIR / "data"
+else:
+    PROJECT_ROOT = Path(__file__).resolve().parents[2]
+    MODELS_DIR = PROJECT_ROOT / "models"
+    DATA_DIR = PROJECT_ROOT / "data"
 
 # --- Camera -------------------------------------------------------------------
 CAMERA_INDEX = 0
