@@ -22,6 +22,10 @@ pip install -e .
 python -m gesture_control.main
 ```
 
+The app asks for administrator rights (UAC) so its clicks reach the on-screen keyboard, see
+[Stage 4](#stage-4--on-screen-keyboard); `--no-admin` skips that. `--log` records a session for
+[diagnosing false clicks](#diagnosing-false-clicks).
+
 ## Tests
 
 ```powershell
@@ -36,172 +40,129 @@ Every module can be run on its own:
 |-----------------------------------------|------------------------------------------------|
 | `python -m gesture_control.camera`      | raw webcam video and FPS                       |
 | `python -m gesture_control.tracker`     | hand skeleton (21 landmarks) and handedness    |
-| `python -m gesture_control.gestures`    | recognized gesture and pinch distances live    |
+| `python -m gesture_control.gestures`    | recognized gesture live                        |
 | `python -m gesture_control.filters`     | noisy vs. One Euro filtered signal             |
 | `python -m gesture_control.mouse`       | cursor visits all four screen corners          |
 | `python -m gesture_control.controller`  | prints ON/OFF when Ctrl+Alt+G is pressed       |
 | `python -m gesture_control.main`        | the full app                                   |
 | `python -m gesture_control.keyboard`    | open / close the on-screen keyboard            |
 | `python -m gesture_control.typing_test` | typing speed test (words per minute)           |
+| `python -m ml.migrate`                  | reuse still-valid old recordings               |
 | `python -m ml.record`                   | record gesture samples for training            |
 | `python -m ml.train`                    | train the gesture classifier                   |
 | `python -m ml.evaluate`                 | accuracy and confusion matrix on the test set  |
+| `python -m ml.replay`                   | replay a `--log` session through the code      |
 
 On first run the MediaPipe hand model (`hand_landmarker.task`, ~8 MB) is downloaded from
 Google's official model storage into `models/`. After that everything works offline.
 
-## Stage 1 — how to verify
-
-1. `python -m gesture_control.main` — a preview window opens.
-2. Raise a hand; the index fingertip is marked with a red dot. Keep the whole hand in the
-   frame — a red bar on a frame edge means the hand is about to leave it and get lost.
-   The cursor follows the finger smoothly, without jitter when the hand is still.
-3. Reach every screen corner: slow moves for aiming, quick flicks to travel far.
-4. Press **Ctrl+Alt+G** — the status turns red (`Control: OFF`) and the cursor stops instantly,
-   so the real mouse can be used. Press again to re-enable.
-5. Check that the preview shows at least ~25 FPS.
-6. Press `q` or `Esc` in the preview window to quit.
-
-Tuning (all in `src/gesture_control/config.py`):
-
-- the cursor is jittery → lower `FILTER_MIN_CUTOFF`;
-- the cursor lags behind fast moves → raise `FILTER_BETA`;
-- hard to reach the edges / arm gets tired → shrink the `WORK_ZONE_*` rectangle or raise `CURSOR_SENSITIVITY`.
-
-## Cursor modes
-
-By default the cursor works like a mouse with pointer acceleration (`CURSOR_MODE = "relative"`):
-
-- **slow** hand movement moves the cursor slowly — for precise aiming at small targets;
-- a **quick flick** sends it across the screen;
-- lowering the hand and raising it somewhere else does not move the cursor (like lifting a mouse).
-
-Tuning in `config.py`:
-
-- still too sensitive when aiming → lower `ACCEL_MIN_GAIN` (e.g. `0.15`);
-- too slow to cross the screen → raise `ACCEL_MAX_GAIN`;
-- acceleration kicks in too early / late → `ACCEL_LOW_SPEED_PX_S` / `ACCEL_HIGH_SPEED_PX_S`.
-
-`CURSOR_MODE = "absolute"` restores the old behaviour: a blue work-zone rectangle is shown in
-the preview and stretched over the whole screen, so a hand position always maps to the same
-screen point.
-
 ## Gestures
 
-| Action         | Gesture                                                      |
-|----------------|--------------------------------------------------------------|
-| Move cursor    | point with the index finger                                  |
-| Left click     | quick pinch: thumb + **index** finger (clicks when you open) |
-| Double click   | two quick thumb + index pinches                              |
-| Drag           | thumb + index pinch, hold still ~0.4 s (`DRAG READY`), move, open to drop |
-| Right click    | pinch: thumb + **middle** finger                             |
-| Scroll         | index + middle **held together**, thumb tucked, ring + pinky folded; then hold the hand above / below that spot (auto scroll) |
-| Pause / resume | hold a fist for ~1 s                                         |
+The gestures use big finger movements, which MediaPipe tracks reliably, instead of fingertip
+contact. Both hands work (left hands are mirrored onto right ones).
 
-## How clicks work
+| Action                 | Gesture                                                                   |
+|------------------------|---------------------------------------------------------------------------|
+| Move cursor            | **L pose**: index + thumb straight, middle / ring / pinky folded          |
+| Left click             | from L, **bend the thumb** in and straighten it again                     |
+| Double click           | two quick thumb bends                                                     |
+| Drag                   | keep the thumb bent ~0.4 s (`DRAG READY`), move the hand, straighten to drop |
+| Right click            | from L, **bend the index finger** and straighten it again                 |
+| Scroll                 | index + middle **together**, thumb tucked; hold the hand above / below the start point |
+| Pause / resume         | hold a fist ~1 s                                                          |
+| On-screen keyboard     | hold a **shaka** 🤙 (only thumb + pinky out) ~1 s                          |
+| Rest                   | any other pose (e.g. open palm) — the cursor stays where it is            |
 
-Each pinch has a **strength** from 0 to 100%, shown as the `L` (left button) and `R`
-(right button) bars at the bottom of the preview:
+The red dot in the preview is the cursor point: the base of the index finger. Neither the thumb
+nor the index bend moves it, so clicks do not shift the cursor.
 
-- the button goes **down** when the bar reaches the **yellow** line (`PINCH_STRENGTH_ON`, 90%)
-  for 2 frames;
-- it goes **up** when the bar falls below the **orange** line (`PINCH_STRENGTH_OFF`, 30%);
-- the bar turns green while the button is held, and the action (`LEFT CLICK`, `DRAG`,
-  `RIGHT CLICK`, `PAUSED`...) flashes at the top.
+### How clicks work
 
-**Left click fires when the fingers open** (`CLICK_MODE = "release"`): a quick pinch never
-holds the button down, so a false pinch cannot drag a window or select text. To drag, hold
-the pinch still until `DRAG READY` flashes — only then is the button pressed. While a pinch
-is building up (bar above half), the cursor stops, so the click lands where you aimed.
-`CLICK_MODE = "press"` restores pressing the button as soon as the pinch is recognized.
+- The cursor moves **only in the L pose**; every other pose is like letting go of a mouse.
+- A click fires when the hand **returns to the L pose** after a bend. So closing the hand into a
+  fist — which passes through both bent poses — never clicks, and clicks are also ignored for
+  `AFTER_FIST_CLICK_GUARD_S` after a fist.
+- A quick bend never holds the button down, so a false bend cannot drag or select. Dragging
+  needs the thumb kept bent until `DRAG READY` flashes.
+- While a bend is building up, the cursor stops, so the click lands where you aimed.
+- The `L` / `R` bars at the bottom of the preview show how strongly the thumb / index bend is
+  seen; the pose counts above the yellow line, the cursor stops above the orange one. The last
+  action (`LEFT CLICK`, `DRAG READY`, `RIGHT CLICK`, `KEYBOARD`, `PAUSED`...) flashes at the top.
+- With a trained model its probabilities are averaged over the last frames
+  (`CLASSIFIER_SMOOTHING`), so one odd frame cannot trigger anything.
 
-With a trained model the strength is the model's confidence in the pinch, or 100% when the
-fingertips touch and the model at least half agrees. Without a model it is the fingertip
-distance alone. If clicks fire too easily, raise `PINCH_STRENGTH_ON`; if a drag drops too
-easily, lower `PINCH_STRENGTH_OFF`.
+### Cursor
+
+By default the cursor works like a mouse with pointer acceleration (`CURSOR_MODE = "relative"`):
+slow hand movement for precise aiming, a quick flick to cross the screen; lowering the hand and
+raising it elsewhere does not move the cursor. Single-frame landmark glitches are ignored
+(`OUTLIER_SPEED`). `CURSOR_MODE = "absolute"` maps a work-zone rectangle onto the screen instead.
+
+Tuning in `src/gesture_control/config.py`:
+
+- jittery → lower `FILTER_MIN_CUTOFF`, raise `CURSOR_GLIDE_TAU_S`;
+- lags behind fast moves → raise `FILTER_BETA`, lower `CURSOR_GLIDE_TAU_S`;
+- too sensitive when aiming → lower `ACCEL_MIN_GAIN`; too slow to cross the screen → raise `ACCEL_MAX_GAIN`;
+- the hand is lost often → more light, keep the whole hand in the frame (a red bar on a frame
+  edge warns that it is leaving).
 
 ### Diagnosing false clicks
 
 1. Run `python -m gesture_control.main --log` and use the app as usual.
-2. Right after a false click / stuck button / wrong right click press **`m`** in the preview
-   window — the action flash shows `MARKED`.
+2. Right after a false click or wrong gesture press **`m`** in the preview window (`MARKED`).
 3. Quit, then run `python -m ml.replay`: it replays the newest `data/session-*.csv` through the
    current code and prints, for every mark, the last 3 seconds frame by frame (gesture, L / R
    strength, what the model saw, which action fired).
 
 The log holds hand landmarks and actions only — no images — and stays in `data/` (not in git).
 
+## Stage 1 — how to verify
+
+1. `python -m gesture_control.main` — a preview window opens.
+2. Show the L pose: the cursor follows smoothly, still when the hand is still.
+3. Reach every screen corner: slow moves for aiming, quick flicks to travel far.
+4. **Ctrl+Alt+G** — `Control: OFF`, the cursor stops instantly; press again to re-enable.
+5. The preview shows at least ~25 FPS. `q` or `Esc` quits.
+
 ## Stage 2 — how to verify
 
-1. `python -m gesture_control.main`; the preview shows the recognized `Gesture:`.
-2. **Click / open a file:** point at a file in Explorer, make two quick thumb + index
-   pinches — it opens. The cursor follows the index knuckle, so pinching does not move it.
-3. **Drag a window:** point at a window title bar, thumb + index pinch, hold, move the hand, open.
-4. **Scroll:** open a long web page, show two fingers held together, then raise the hand a
-   little and hold it — the page keeps scrolling (orange line in the preview = start point);
-   further from the line = faster; open the fingers to stop.
-5. **Right click:** thumb + middle pinch on the desktop opens the context menu.
-6. **Pause:** hold a fist ~1 s — status turns `PAUSED`, nothing reacts; hold a fist again to resume.
-
-A hand getting ready to pinch is deliberately *not* scroll — scroll needs index and middle
-together with the thumb tucked away from both.
-
-If a gesture is not recognized, run `python -m gesture_control.gestures` and look at the
-`pi` / `pm` pinch distances and the index-middle `gap`, then tune in `config.py`:
-
-- clicks do not trigger → raise `PINCH_ON_RATIO`; accidental clicks → lower it;
-- drag / selection when you only wanted to click → raise `DRAG_MIN_HOLD_S` or `DRAG_START_PX`;
-- scroll does not start → raise `SCROLL_FINGERS_TOGETHER_RATIO` or lower `SCROLL_THUMB_AWAY_RATIO`;
-- the page scrolls while getting ready to click → the opposite of the line above;
-- double click is not registered → raise `CLICK_SETTLE_S`;
-- auto scroll too slow / fast → `SCROLL_AUTO_SPEED`, `SCROLL_AUTO_MAX_TICKS_S`;
-- scrolls while the hand is held still → raise `SCROLL_AUTO_DEADZONE`;
-- direction → `SCROLL_INVERT`; page-follows-hand scrolling instead → `SCROLL_MODE = "drag"`;
-- swap which pinch is left / right → `LEFT_BUTTON_GESTURE`, `RIGHT_BUTTON_GESTURE`;
-- the hand is lost too often → lower `MIN_HAND_*_CONFIDENCE`, add light, keep the
-  whole hand inside the camera frame;
-- the cursor freezes while pointing → the preview shows `fist` by mistake:
-  lower `FIST_TIP_RATIO` or raise `DEPTH_WEIGHT`.
-
-## Cursor stabilization
-
-- The cursor follows the **base knuckle of the index finger**, not the fingertip: it moves with
-  the hand but ignores finger bending and pinches. Change with `CURSOR_POINT_WEIGHTS`
-  (`{LM_INDEX_TIP: 1.0}` = fingertip, a blend = finer but less stable).
-- **Glitch rejection:** single-frame landmark jumps are ignored; if the hand really is elsewhere
-  the cursor re-anchors without jumping (`OUTLIER_SPEED`, `OUTLIER_CONFIRM_FRAMES`).
-- **Click safety:** a pinch must hold for `PINCH_CONFIRM_FRAMES` frames, release is debounced
-  (`PINCH_RELEASE_FRAMES`), no clicks for `ACQUIRE_GRACE_FRAMES` after the hand appears, and with a
-  trained model a pinch only clicks if the model agrees (`CLASSIFIER_PINCH_MIN_PROB`).
+1. **Open a file:** point at a file in Explorer, two quick thumb bends.
+2. **Drag a window:** point at its title bar, keep the thumb bent until `DRAG READY`, move, straighten.
+3. **Scroll:** on a long page show two fingers together, raise the hand a little and hold — the
+   page keeps scrolling (orange line = start point); further = faster; change pose to stop.
+4. **Right click:** bend the index finger and straighten it on the desktop — context menu.
+5. **Pause:** hold a fist ~1 s (`PAUSED`), again to resume.
 
 ## Stage 3 — gesture classifier
 
 ### 1. Record data
 
+The gesture set changed in stage 4, so the dataset is `data/gestures_v2.csv`. First reuse the
+old recordings of the poses that did not change (scroll, fist, open palm):
+
 ```powershell
+python -m ml.migrate
 python -m ml.record
 ```
 
-Press `1`…`7` to choose a gesture, `Space` to start / stop recording, `u` to undo the last
-samples, `q` to quit. Only landmark coordinates are saved (`data/gestures.csv`), never images.
-The goal is **500+ samples per gesture** (the counter turns green).
+In the recorder press `1`…`8` to choose a gesture, `Space` to start / stop, `u` to undo the last
+samples, `q` to quit. Only landmark coordinates are saved, never images. Goal: **500+ samples
+per gesture** (the counter turns green).
 
-| Key | Gesture        | How to record it                                                   |
-|-----|----------------|--------------------------------------------------------------------|
-| 1   | `none`         | relaxed hand, transitions, half-open poses — anything else         |
-| 2   | `point`        | index finger out, others folded. **Also record "almost pinch":**   |
-|     |                | thumb close to the index finger but not touching, slowly closing   |
-|     |                | and opening — otherwise the model clicks on a slight squeeze       |
-| 3   | `pinch_index`  | thumb touching index fingertip — record both with the other fingers |
-|     |                | **curled into a fist** and with them **spread out** ("OK" sign)    |
-| 4   | `pinch_middle` | thumb touching middle fingertip                                    |
-| 5   | `two_fingers`  | index + middle together, thumb tucked                              |
-| 6   | `fist`         | closed fist                                                        |
-| 7   | `open_palm`    | all fingers spread                                                 |
+| Key | Gesture       | How to record it                                                        |
+|-----|---------------|-------------------------------------------------------------------------|
+| 1   | `none`        | relaxed / half-open hand, transitions — anything that is not a gesture   |
+| 2   | `l_pose`      | index + thumb straight, other fingers folded                             |
+| 3   | `thumb_bent`  | L pose with the thumb bent in (index stays straight)                     |
+| 4   | `index_bent`  | L pose with the index finger bent (thumb stays straight)                 |
+| 5   | `two_fingers` | index + middle together, thumb tucked (migrated)                         |
+| 6   | `fist`        | closed fist, thumb over the fingers (migrated)                           |
+| 7   | `open_palm`   | all fingers spread (migrated)                                            |
+| 8   | `shaka`       | only thumb + pinky out                                                   |
 
-Tips: while recording, slowly move and rotate the hand, change distance (0.3–1 m), use both
-hands and record in two or three sessions with different lighting. Variety matters more
-than count.
+Record both hands, move and rotate the hand slowly, change the distance (0.3–1 m). For
+`thumb_bent` / `index_bent` include light and full bends; for `l_pose` include a thumb that is
+only slightly open, so the model learns where the boundary is.
 
 ### 2. Train and evaluate
 
@@ -210,47 +171,38 @@ python -m ml.train
 python -m ml.evaluate
 ```
 
-Training takes seconds and writes `models/gesture.npz`; `evaluate` prints accuracy, per-gesture
-precision / recall, the confusion matrix and whether the stage targets are met
-(>= 500 samples per gesture, >= 95% accuracy). If a pair of gestures is confused, record more
-varied samples of both and retrain.
+`evaluate` prints accuracy, per-gesture precision / recall, the confusion matrix and whether the
+stage targets are met (>= 500 samples per gesture, >= 95% accuracy).
 
 ### 3. Use it
 
-`python -m gesture_control.main` picks the model up automatically (console:
-`trained classifier + rules`; the preview shows the model confidence next to the gesture).
-Delete `models/gesture.npz` or set `USE_CLASSIFIER = False` to go back to rules only.
+The app picks up `models/gesture.npz` automatically (console: `trained classifier + rules`). A
+model trained for an older gesture set is ignored with a message. `USE_CLASSIFIER = False`
+uses the rules only.
 
 ## Stage 4 — on-screen keyboard
 
 The Windows on-screen keyboard (`osk.exe`) runs with **high privileges**, and Windows blocks
-clicks, window messages and termination coming from normal programs (UIPI). This was verified
-at the start of the stage: a pynput click on its close button was ignored and `taskkill` was
-denied. Therefore **AirTouch asks for administrator rights on start** (UAC prompt) and restarts
-itself elevated in a new console window. `--no-admin` skips this (then keyboard clicks do not
-work). Running as administrator also lifts the "cannot click administrator windows" limitation.
+clicks, window messages and termination coming from normal programs (UIPI) — verified at the
+start of the stage. Therefore **AirTouch asks for administrator rights on start** (UAC) and
+restarts itself elevated in a new console window. This also lifts the "cannot click
+administrator windows" limitation.
 
-- **Open / close:** hold an **open palm** (all fingers spread) still for ~1 s — `KEYBOARD`
-  flashes and the preview status shows `Keyboard`.
-- **Type:** point at a key and do a quick thumb + index pinch.
-- The keyboard opens **enlarged** at the bottom of the screen (`OSK_WIDTH_FRACTION`,
-  `OSK_HEIGHT_FRACTION`) with **word prediction** on (`OSK_WORD_PREDICTION`); layouts and
-  language switching are the usual Windows ones.
+- **Open / close:** hold a **shaka** 🤙 ~1 s — `KEYBOARD` flashes, the status shows `Keyboard`.
+- **Type:** L pose over a key, quick thumb bend.
+- The keyboard opens **enlarged** at the bottom of the screen with **word prediction** on;
+  layouts and language switching are the usual Windows ones.
 
 ### How to verify
 
-1. **Click check** (the spec's first step) from an **administrator** PowerShell in the project:
-   `python -m gesture_control.keyboard --check` — it opens the keyboard, clicks its close
-   button with pynput and must print `OK: pynput clicks reach osk.exe`. From a normal terminal
-   it prints `BLOCKED` (expected).
-2. `python -m gesture_control.main` → accept the UAC prompt → the app runs in a new window.
-3. Hold an open palm ~1 s — the enlarged keyboard opens.
-4. Open Notepad or a messenger, click into the text field, type a message with pinches and
-   press the keyboard's Enter to send it.
-5. Hold an open palm again — the keyboard closes.
-6. **Typing speed:** in another terminal run `python -m gesture_control.typing_test`, click into
-   it, and for each phrase press Enter, type it with gestures, press Enter. It prints words per
-   minute and accuracy; the spec target is at least 10 WPM.
+1. **Click check** from an **administrator** PowerShell in the project folder, without touching
+   the mouse: `.venv\Scripts\python -m gesture_control.keyboard --check` must print
+   `running as administrator: True` and `OK: pynput clicks reach osk.exe`.
+2. Start the app, accept UAC; hold a shaka ~1 s — the keyboard opens.
+3. In Notepad or a messenger type a message with thumb bends and press the keyboard's Enter.
+4. Shaka again — the keyboard closes.
+5. **Typing speed:** `python -m gesture_control.typing_test` in another terminal; for each
+   phrase press Enter, type it with gestures, press Enter. Target: at least 10 WPM.
 
-In PyCharm the elevated copy starts in its own console window; PyCharm's run window ends
-right away. To run PyCharm's console elevated instead, start PyCharm as administrator.
+In PyCharm the elevated copy starts in its own console window and PyCharm's run ends right
+away; start PyCharm as administrator to keep everything in its console.
