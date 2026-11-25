@@ -236,11 +236,11 @@ ACCEL_HIGH_SPEED_PX_S = 3000.0
 # --- Cursor smoothing (One Euro Filter, in screen pixels) ----------------------
 # min_cutoff — lower = stronger jitter smoothing at rest.
 # beta — higher = less lag during fast movement.
-FILTER_MIN_CUTOFF = 0.5
+FILTER_MIN_CUTOFF = 0.3
 FILTER_BETA = 0.02
 FILTER_D_CUTOFF = 1.0
 # Cursor moves smaller than this (px) are ignored — removes micro-jitter.
-CURSOR_DEADZONE_PX = 2.5
+CURSOR_DEADZONE_PX = 3.0
 
 # Outlier rejection: MediaPipe sometimes makes the landmarks jump for a frame or
 # two (e.g. when re-detecting the hand). A hand "moving" faster than this
@@ -256,7 +256,7 @@ OUTLIER_CONFIRM_FRAMES = 2
 # jumping several pixels every frame.
 CURSOR_ANIMATION_HZ = 144
 # Time constant of the glide (exponential approach), s. Higher = smoother, more lag.
-CURSOR_GLIDE_TAU_S = 0.025
+CURSOR_GLIDE_TAU_S = 0.06
 # Closer than this to the target (px) — snap and stop moving.
 CURSOR_SNAP_PX = 0.5
 # If the hand is lost for longer than this, the filter is reset so the cursor
