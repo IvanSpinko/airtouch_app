@@ -18,11 +18,19 @@ pip install -e .
 
 ## Run
 
+The tray app (what `AirTouch.exe` starts):
+
+```powershell
+python -m gesture_control.app
+```
+
+The command-line version with the camera window:
+
 ```powershell
 python -m gesture_control.main
 ```
 
-The app asks for administrator rights (UAC) so its clicks reach the on-screen keyboard, see
+Both ask for administrator rights (UAC) so their clicks reach the on-screen keyboard, see
 [Stage 4](#stage-4--on-screen-keyboard); `--no-admin` skips that. `--log` records a session for
 [diagnosing false clicks](#diagnosing-false-clicks).
 
@@ -44,7 +52,10 @@ Every module can be run on its own:
 | `python -m gesture_control.filters`     | noisy vs. One Euro filtered signal             |
 | `python -m gesture_control.mouse`       | cursor visits all four screen corners          |
 | `python -m gesture_control.controller`  | prints ON/OFF when Ctrl+Alt+G is pressed       |
-| `python -m gesture_control.main`        | the full app                                   |
+| `python -m gesture_control.app`         | the tray app with the status indicator         |
+| `python -m gesture_control.main`        | the app with the camera window                 |
+| `python -m gesture_control.overlay`     | the status indicator with demo states          |
+| `python -m gesture_control.settings`    | current settings and the settings file         |
 | `python -m gesture_control.keyboard`    | open / close the on-screen keyboard            |
 | `python -m gesture_control.typing_test` | typing speed test (words per minute)           |
 | `python -m ml.migrate`                  | reuse still-valid old recordings               |
@@ -206,3 +217,55 @@ administrator windows" limitation.
 
 In PyCharm the elevated copy starts in its own console window and PyCharm's run ends right
 away; start PyCharm as administrator to keep everything in its console.
+
+## Stage 5 — tray, calibration, settings, .exe
+
+### Tray app
+
+`python -m gesture_control.app` (or `AirTouch.exe`) runs in the system tray:
+
+- the **icon color** shows the state: green = on, yellow = paused, grey = off, red = error;
+  left click toggles control (same as Ctrl+Alt+G);
+- a small **indicator** in the top-right corner shows whether the hand is seen, the gesture
+  and the last action; it never takes focus and clicks go through it;
+- **menu** (right click): control on / off, pause, on-screen keyboard, camera window,
+  indicator, **Calibrate...**, **Settings...**, quit.
+
+### Calibration
+
+Tray → **Calibrate...** → Start (cursor control pauses meanwhile):
+
+1. show the L pose and sweep it over the whole area that is comfortable for your hand;
+2. hold the L pose still for 3 s.
+
+The cursor sensitivity is set so that this comfortable area covers the screen, and the jitter
+filter / dead zone follow the measured hand tremor. Save applies it immediately.
+
+### Settings
+
+Tray → **Settings...**: cursor speed, aiming speed, sensitivity, smoothness, jitter filter,
+dead zone, hold times (drag, keyboard, pause), scroll speed, camera number, camera window.
+They are saved to `%APPDATA%\AirTouch\settings.json` and override `config.py`.
+
+### Build the .exe
+
+```powershell
+python -m scripts.build
+```
+
+Produces `dist\AirTouch.exe` (one file; `--onedir` makes a folder that starts faster) and
+runs its self-test (`AirTouch.exe --self-test`: loads the hand tracker, the gesture model and
+Qt without touching camera or mouse). The MediaPipe hand model and the gesture model are
+bundled, so it works offline; PyTorch is not included. On start the exe asks for
+administrator rights like the source version.
+
+### How to verify
+
+1. Run `python -m scripts.build` — it ends with `self-test exit code 0: OK`.
+2. **Clean Windows:** enable *Windows Sandbox* (Windows 11 Pro: *Turn Windows features on or
+   off* → *Windows Sandbox*), copy `dist\AirTouch.exe` into it and start it. The tray icon and
+   the indicator appear. (Sandbox has no webcam by default, so the icon turns red with
+   "Cannot open camera" — that still proves the exe starts on a clean system. To test with the
+   camera, use a `.wsb` config with `<VideoInput>Enable</VideoInput>`.)
+3. On your PC: start `AirTouch.exe`, accept UAC, use the gestures, open Calibrate... and
+   Settings... from the tray menu.
