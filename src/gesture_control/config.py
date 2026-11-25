@@ -3,12 +3,17 @@
 Project rule: no magic numbers in other modules — they live here only.
 """
 
+import os
 from pathlib import Path
 
 # --- Paths --------------------------------------------------------------------
+APP_NAME = "AirTouch"
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 MODELS_DIR = PROJECT_ROOT / "models"
 DATA_DIR = PROJECT_ROOT / "data"
+# Per-user files of the installed app (settings).
+APP_DATA_DIR = Path(os.environ.get("APPDATA", Path.home())) / APP_NAME
+SETTINGS_PATH = APP_DATA_DIR / "settings.json"
 
 # --- Camera -------------------------------------------------------------------
 CAMERA_INDEX = 0
