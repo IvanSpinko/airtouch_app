@@ -41,6 +41,18 @@ keyboard using gestures.
 - Calibration of the work zone and cursor sensitivity.
 - Enable/disable via a hotkey and from the system tray.
 
+**Gesture set (revised in stage 4).** Testing showed that fingertip pinches are the least
+reliable thing MediaPipe tracks, so the mouse gestures were changed to big finger movements:
+
+| Action          | Gesture                                                     |
+|-----------------|-------------------------------------------------------------|
+| Move cursor     | L pose: index + thumb straight, other fingers folded        |
+| Left click      | bend the thumb and return to L (hold = drag)                |
+| Right click     | bend the index finger and return to L                       |
+| Scroll          | index + middle together, hand above / below the start point |
+| Pause           | fist                                                        |
+| Keyboard        | shaka (thumb + pinky) held 1 s                              |
+
 ## Non-functional requirements
 
 The target values below are tentative and should be refined after the first prototype.
@@ -130,6 +142,7 @@ airtouch_app/
 │   ├── dataset.py        # CSV storage, features, splits, augmentation
 │   ├── record.py         # record gestures to data/*.csv
 │   ├── train.py          # train MLP -> models/gesture.pt
+│   ├── migrate.py        # reuse recordings of the first gesture set
 │   ├── evaluate.py       # accuracy, confusion matrix
 │   └── replay.py         # replay a session log through the current code
 ├── data/
