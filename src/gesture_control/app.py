@@ -16,7 +16,7 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from gesture_control import config, keyboard, settings
+from gesture_control import __version__, config, keyboard, settings
 from gesture_control.engine import Engine
 from gesture_control.overlay import Indicator, make_icon, status_of
 
@@ -56,6 +56,10 @@ class TrayApp:
 
     def _build_menu(self) -> QMenu:
         menu = QMenu()
+        title = QAction(f"{config.APP_NAME} {__version__}", menu)
+        title.setEnabled(False)
+        menu.addAction(title)
+        menu.addSeparator()
         self.act_enabled = self._action(
             menu, f"Control enabled  ({config.HOTKEY_TOGGLE})", self.toggle_enabled, True)
         self.act_paused = self._action(menu, "Paused  (hold fist)", self.toggle_pause, True)
@@ -127,7 +131,7 @@ class TrayApp:
         text, color = status_of(snap)
         self.tray.setIcon(self._icons.get(color, self._icons[config.STATUS_COLOR_OFF]))
         hand = "hand visible" if snap.hand_visible else "no hand"
-        self.tray.setToolTip(f"{config.APP_NAME}: {text}, {hand}")
+        self.tray.setToolTip(f"{config.APP_NAME} {__version__}: {text}, {hand}")
         self.act_enabled.setChecked(snap.enabled)
         self.act_paused.setChecked(snap.paused)
         self.act_preview.setChecked(config.SHOW_PREVIEW)
@@ -166,6 +170,7 @@ def self_test() -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="AirTouch tray app")
+    parser.add_argument("--version", action="version", version=f"{config.APP_NAME} {__version__}")
     parser.add_argument("--log", action="store_true", help="record a session log in data/")
     parser.add_argument("--no-admin", action="store_true",
                         help="do not ask for administrator rights (keyboard clicks will not work)")
