@@ -95,7 +95,7 @@ Each stage ends with a working version that can be demonstrated.
   screen corners, and a hotkey instantly disables control.
 - [x] **2. Clicks, drag, scroll.** Done when you can open a file, drag a window and scroll a page
   without a mouse.
-- [ ] **3. Dataset and gesture classifier.** Done when at least 500 samples per gesture are
+- [x] **3. Dataset and gesture classifier.** Done when at least 500 samples per gesture are
   collected and the model reaches at least 95% accuracy.
 - [ ] **4. Keyboard via osk.exe.** Done when a gesture opens and closes the Windows on-screen
   keyboard and you can type and send a message using gestures only. Measure typing speed (WPM).
@@ -122,13 +122,16 @@ airtouch_app/
 │   ├── controller.py     # mouse / keyboard / pause modes
 │   ├── mouse.py          # pynput: cursor, clicks, scroll
 │   ├── keyboard.py       # launching and closing osk.exe
+│   ├── typing_test.py    # typing speed test (WPM)
+│   ├── sessionlog.py     # optional session log for diagnosing false clicks
 │   ├── overlay.py        # PyQt6: indicator and settings
 │   └── config.py         # all thresholds and parameters
 ├── ml/
 │   ├── dataset.py        # CSV storage, features, splits, augmentation
 │   ├── record.py         # record gestures to data/*.csv
 │   ├── train.py          # train MLP -> models/gesture.pt
-│   └── evaluate.py       # accuracy, confusion matrix
+│   ├── evaluate.py       # accuracy, confusion matrix
+│   └── replay.py         # replay a session log through the current code
 ├── data/
 ├── models/
 └── tests/
