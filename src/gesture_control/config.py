@@ -282,6 +282,34 @@ SM_CYSCREEN = 1
 # Pause between steps of the ``python -m gesture_control.mouse`` demo, s.
 MOUSE_DEMO_STEP_S = 0.7
 
+# --- On-screen keyboard (stage 4) ---------------------------------------------
+OSK_PATH = r"C:\Windows\System32\osk.exe"
+OSK_WINDOW_CLASS = "OSKMainClass"
+OSK_REGISTRY_KEY = r"Software\Microsoft\Osk"
+# Enlarged keyboard: share of the screen, centered at the bottom.
+OSK_WIDTH_FRACTION = 0.95
+OSK_HEIGHT_FRACTION = 0.48
+OSK_BOTTOM_MARGIN_FRACTION = 0.02
+OSK_WORD_PREDICTION = True
+OSK_MODE_CLICK = 1   # osk.exe "Mode" value: click on keys (not hover / scan)
+OSK_WAIT_S = 5.0     # how long to wait for the window to appear / disappear
+OSK_POLL_S = 0.1
+# --check: where the close (X) button is, from the window's top-right corner, px
+OSK_CLOSE_BUTTON_DX = 25
+OSK_CLOSE_BUTTON_DY = 18
+OSK_CHECK_SETTLE_S = 0.5
+# Holding an open palm this long opens / closes the keyboard.
+KEYBOARD_TOGGLE_HOLD_S = 1.0
+# osk.exe only accepts our clicks when AirTouch runs as administrator; ask for it
+# (UAC prompt) on start. --no-admin skips it (keyboard clicks will not work).
+RUN_AS_ADMIN = True
+
+# --- Windows API constants (keyboard) -------------------------------------------
+BASE_DPI = 96
+SW_SHOWNORMAL = 1
+SHELL_EXECUTE_OK = 32   # ShellExecute returns > 32 on success
+WM_CLOSE = 0x0010
+
 # --- Hotkeys ------------------------------------------------------------------
 # pynput.keyboard.GlobalHotKeys format.
 HOTKEY_TOGGLE = "<ctrl>+<alt>+g"
