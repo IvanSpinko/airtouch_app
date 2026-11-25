@@ -26,13 +26,14 @@ class OneEuroFilter:
 
     def __init__(
         self,
-        min_cutoff: float = config.FILTER_MIN_CUTOFF,
-        beta: float = config.FILTER_BETA,
-        d_cutoff: float = config.FILTER_D_CUTOFF,
+        min_cutoff: float | None = None,
+        beta: float | None = None,
+        d_cutoff: float | None = None,
     ) -> None:
-        self.min_cutoff = min_cutoff
-        self.beta = beta
-        self.d_cutoff = d_cutoff
+        # Defaults come from config when the filter is created (settings can change them).
+        self.min_cutoff = config.FILTER_MIN_CUTOFF if min_cutoff is None else min_cutoff
+        self.beta = config.FILTER_BETA if beta is None else beta
+        self.d_cutoff = config.FILTER_D_CUTOFF if d_cutoff is None else d_cutoff
         self.reset()
 
     def reset(self) -> None:

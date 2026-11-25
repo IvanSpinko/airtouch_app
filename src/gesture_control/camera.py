@@ -27,17 +27,17 @@ class Camera:
 
     def __init__(
         self,
-        index: int = config.CAMERA_INDEX,
-        width: int = config.CAMERA_WIDTH,
-        height: int = config.CAMERA_HEIGHT,
-        fps: int = config.CAMERA_FPS,
-        mirror: bool = config.CAMERA_MIRROR,
+        index: int | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        fps: int | None = None,
+        mirror: bool | None = None,
     ) -> None:
-        self.index = index
-        self.width = width
-        self.height = height
-        self.fps = fps
-        self.mirror = mirror
+        self.index = config.CAMERA_INDEX if index is None else index
+        self.width = config.CAMERA_WIDTH if width is None else width
+        self.height = config.CAMERA_HEIGHT if height is None else height
+        self.fps = config.CAMERA_FPS if fps is None else fps
+        self.mirror = config.CAMERA_MIRROR if mirror is None else mirror
 
         self._cap: cv2.VideoCapture | None = None
         self._thread: threading.Thread | None = None

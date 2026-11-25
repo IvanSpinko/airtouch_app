@@ -13,7 +13,7 @@ import math
 import sys
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Callable
 
 from gesture_control import config
@@ -47,11 +47,12 @@ def screen_size() -> tuple[int, int]:
 class WorkZone:
     """Rectangle in normalized frame coordinates mapped onto the whole screen."""
 
-    left: float = config.WORK_ZONE_LEFT
-    top: float = config.WORK_ZONE_TOP
-    right: float = config.WORK_ZONE_RIGHT
-    bottom: float = config.WORK_ZONE_BOTTOM
-    sensitivity: float = config.CURSOR_SENSITIVITY
+    # default_factory: read config when the zone is created, so settings apply
+    left: float = field(default_factory=lambda: config.WORK_ZONE_LEFT)
+    top: float = field(default_factory=lambda: config.WORK_ZONE_TOP)
+    right: float = field(default_factory=lambda: config.WORK_ZONE_RIGHT)
+    bottom: float = field(default_factory=lambda: config.WORK_ZONE_BOTTOM)
+    sensitivity: float = field(default_factory=lambda: config.CURSOR_SENSITIVITY)
 
     def effective(self) -> tuple[float, float, float, float]:
         """Zone bounds after applying sensitivity (scaled around the center)."""
@@ -115,11 +116,14 @@ class CursorMapper:
         width: int,
         height: int,
         zone: WorkZone | None = None,
-        deadzone_px: float = config.CURSOR_DEADZONE_PX,
-        lost_reset_s: float = config.HAND_LOST_RESET_S,
-        mode: str = config.CURSOR_MODE,
+        deadzone_px: float | None = None,
+        lost_reset_s: float | None = None,
+        mode: str | None = None,
         position_source: Callable[[], tuple[float, float]] | None = None,
     ) -> None:
+        deadzone_px = config.CURSOR_DEADZONE_PX if deadzone_px is None else deadzone_px
+        lost_reset_s = config.HAND_LOST_RESET_S if lost_reset_s is None else lost_reset_s
+        mode = config.CURSOR_MODE if mode is None else mode
         if mode not in ("absolute", "relative"):
             raise ValueError(f"unknown cursor mode: {mode!r}")
         self.width = width
@@ -210,9 +214,11 @@ class CursorMapper:
 
 def glide_step(
     current: tuple[float, float], target: tuple[float, float], dt: float,
-    tau: float = config.CURSOR_GLIDE_TAU_S, snap: float = config.CURSOR_SNAP_PX,
+    tau: float | None = None, snap: float | None = None,
 ) -> tuple[float, float]:
     """One step of exponential approach from ``current`` to ``target``."""
+    tau = config.CURSOR_GLIDE_TAU_S if tau is None else tau
+    snap = config.CURSOR_SNAP_PX if snap is None else snap
     dx, dy = target[0] - current[0], target[1] - current[1]
     if (dx * dx + dy * dy) ** 0.5 <= snap:
         return target
