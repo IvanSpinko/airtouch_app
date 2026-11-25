@@ -75,13 +75,20 @@ class WorkZone:
 
 def accel_gain(
     speed: float,
-    min_gain: float = config.ACCEL_MIN_GAIN,
-    max_gain: float = config.ACCEL_MAX_GAIN,
-    low: float = config.ACCEL_LOW_SPEED_PX_S,
-    high: float = config.ACCEL_HIGH_SPEED_PX_S,
+    min_gain: float | None = None,
+    max_gain: float | None = None,
+    low: float | None = None,
+    high: float | None = None,
 ) -> float:
     """Pointer acceleration curve: slow hand -> small gain (precise aiming),
-    fast hand -> large gain (quick travel). Smooth S-curve in between."""
+    fast hand -> large gain (quick travel). Smooth S-curve in between.
+
+    Defaults are read from config at call time, so tuning takes effect immediately.
+    """
+    min_gain = config.ACCEL_MIN_GAIN if min_gain is None else min_gain
+    max_gain = config.ACCEL_MAX_GAIN if max_gain is None else max_gain
+    low = config.ACCEL_LOW_SPEED_PX_S if low is None else low
+    high = config.ACCEL_HIGH_SPEED_PX_S if high is None else high
     k = min(max((speed - low) / (high - low), 0.0), 1.0)
     k = k * k * (3.0 - 2.0 * k)  # smoothstep
     return min_gain + (max_gain - min_gain) * k

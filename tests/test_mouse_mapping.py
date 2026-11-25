@@ -182,3 +182,8 @@ def test_absolute_mode_also_rejects_glitch():
     for i in range(30):
         m.update(0.5, 0.5, i * DT)
     assert m.update(0.0, 0.0, 30 * DT) is None
+
+
+def test_accel_gain_reads_config_at_call_time(monkeypatch):
+    monkeypatch.setattr(config, "ACCEL_MAX_GAIN", 9.0)
+    assert accel_gain(1e9) == 9.0
