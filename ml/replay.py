@@ -78,7 +78,10 @@ def replay(frames: list[Frame], classifier: GestureClassifier | None):
     trace, last_event = [], None
     for fr in frames:
         gesture = detector.update(fr.landmarks, fr.handedness)
-        ctl.update(gesture, cursor_point(fr.landmarks) if fr.landmarks is not None else None, fr.t)
+        ctl.update(
+            gesture, cursor_point(fr.landmarks) if fr.landmarks is not None else None, fr.t,
+            max(detector.strength.values()),
+        )
         event = ctl.last_event if ctl.last_event != last_event else None
         last_event = ctl.last_event
         probs = detector.probs if fr.landmarks is not None else None

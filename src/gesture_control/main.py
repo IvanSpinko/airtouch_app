@@ -190,7 +190,7 @@ def run(log: bool = False) -> None:
                         hand.handedness if hand else "Right",
                     )
                     point = hand.cursor_point() if hand else None
-                    ctl.update(gesture, point, ts)
+                    ctl.update(gesture, point, ts, max(detector.strength.values()))
                 elif was_enabled:
                     ctl.release_all()
                     detector.reset()
