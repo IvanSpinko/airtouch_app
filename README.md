@@ -41,6 +41,8 @@ Every module can be run on its own:
 | `python -m gesture_control.mouse`       | cursor visits all four screen corners          |
 | `python -m gesture_control.controller`  | prints ON/OFF when Ctrl+Alt+G is pressed       |
 | `python -m gesture_control.main`        | the full app                                   |
+| `python -m gesture_control.keyboard`    | open / close the on-screen keyboard            |
+| `python -m gesture_control.typing_test` | typing speed test (words per minute)           |
 | `python -m ml.record`                   | record gesture samples for training            |
 | `python -m ml.train`                    | train the gesture classifier                   |
 | `python -m ml.evaluate`                 | accuracy and confusion matrix on the test set  |
@@ -218,3 +220,37 @@ varied samples of both and retrain.
 `python -m gesture_control.main` picks the model up automatically (console:
 `trained classifier + rules`; the preview shows the model confidence next to the gesture).
 Delete `models/gesture.npz` or set `USE_CLASSIFIER = False` to go back to rules only.
+
+## Stage 4 — on-screen keyboard
+
+The Windows on-screen keyboard (`osk.exe`) runs with **high privileges**, and Windows blocks
+clicks, window messages and termination coming from normal programs (UIPI). This was verified
+at the start of the stage: a pynput click on its close button was ignored and `taskkill` was
+denied. Therefore **AirTouch asks for administrator rights on start** (UAC prompt) and restarts
+itself elevated in a new console window. `--no-admin` skips this (then keyboard clicks do not
+work). Running as administrator also lifts the "cannot click administrator windows" limitation.
+
+- **Open / close:** hold an **open palm** (all fingers spread) still for ~1 s — `KEYBOARD`
+  flashes and the preview status shows `Keyboard`.
+- **Type:** point at a key and do a quick thumb + index pinch.
+- The keyboard opens **enlarged** at the bottom of the screen (`OSK_WIDTH_FRACTION`,
+  `OSK_HEIGHT_FRACTION`) with **word prediction** on (`OSK_WORD_PREDICTION`); layouts and
+  language switching are the usual Windows ones.
+
+### How to verify
+
+1. **Click check** (the spec's first step) from an **administrator** PowerShell in the project:
+   `python -m gesture_control.keyboard --check` — it opens the keyboard, clicks its close
+   button with pynput and must print `OK: pynput clicks reach osk.exe`. From a normal terminal
+   it prints `BLOCKED` (expected).
+2. `python -m gesture_control.main` → accept the UAC prompt → the app runs in a new window.
+3. Hold an open palm ~1 s — the enlarged keyboard opens.
+4. Open Notepad or a messenger, click into the text field, type a message with pinches and
+   press the keyboard's Enter to send it.
+5. Hold an open palm again — the keyboard closes.
+6. **Typing speed:** in another terminal run `python -m gesture_control.typing_test`, click into
+   it, and for each phrase press Enter, type it with gestures, press Enter. It prints words per
+   minute and accuracy; the spec target is at least 10 WPM.
+
+In PyCharm the elevated copy starts in its own console window; PyCharm's run window ends
+right away. To run PyCharm's console elevated instead, start PyCharm as administrator.
