@@ -437,3 +437,43 @@ def test_dragging_is_never_auto_released():
     r.run(LEFT, (0.3, 0.3), seconds=0.4)
     r.run(LEFT, (0.6, 0.6), seconds=config.LEFT_HOLD_STILL_MAX_S + 0.5)
     assert r.ctl.dragging and r.buttons.names() == ["press"]
+
+
+# -- open palm -> on-screen keyboard ------------------------------------------------
+def palm_rig():
+    calls = []
+    r = Rig()
+    r.ctl.on_keyboard_toggle = lambda: calls.append(r.t)
+    return r, calls
+
+
+def test_open_palm_hold_toggles_keyboard_once():
+    r, calls = palm_rig()
+    r.run(G.POINT, seconds=0.3)
+    r.run(G.OPEN_PALM, seconds=config.KEYBOARD_TOGGLE_HOLD_S * 3)
+    assert len(calls) == 1
+    assert r.ctl.last_event[0] == "KEYBOARD"
+
+
+def test_short_open_palm_does_nothing():
+    r, calls = palm_rig()
+    r.run(G.OPEN_PALM, seconds=config.KEYBOARD_TOGGLE_HOLD_S / 2)
+    r.run(G.POINT, seconds=0.3)
+    r.run(G.OPEN_PALM, seconds=config.KEYBOARD_TOGGLE_HOLD_S / 2)
+    assert calls == []
+
+
+def test_second_hold_toggles_again():
+    r, calls = palm_rig()
+    for _ in range(2):
+        r.run(G.OPEN_PALM, seconds=config.KEYBOARD_TOGGLE_HOLD_S + 0.1)
+        r.run(G.POINT, seconds=0.3)
+    assert len(calls) == 2
+
+
+def test_palm_ignored_while_paused():
+    r, calls = palm_rig()
+    r.run(G.FIST, seconds=config.FIST_HOLD_S + 0.1)
+    assert r.ctl.paused
+    r.run(G.OPEN_PALM, seconds=config.KEYBOARD_TOGGLE_HOLD_S + 0.5)
+    assert calls == []

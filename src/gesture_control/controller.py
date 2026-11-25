@@ -88,13 +88,21 @@ class GestureController:
     - TWO_FINGERS: cursor frozen; scrolls by hand offset from where the pose started
       (``SCROLL_MODE`` "auto", like a pressed mouse wheel) or by hand movement ("drag").
     - FIST held for ``FIST_HOLD_S``: toggles pause.
+    - OPEN_PALM held for ``KEYBOARD_TOGGLE_HOLD_S``: calls ``on_keyboard_toggle``
+      (opens / closes the on-screen keyboard).
 
     OS output goes through ``cursor`` and ``buttons``, so the logic is testable
     without touching the real mouse.
     """
 
-    def __init__(self, mapper: CursorMapper, cursor: CursorSink, buttons: ButtonSink) -> None:
+    def __init__(
+        self, mapper: CursorMapper, cursor: CursorSink, buttons: ButtonSink,
+        on_keyboard_toggle: Callable[[], None] | None = None,
+    ) -> None:
         self.mapper = mapper
+        self.on_keyboard_toggle = on_keyboard_toggle
+        self._palm_since: float | None = None
+        self._palm_used = False
         self.cursor = cursor
         self.buttons = buttons
         self.paused = False
@@ -155,6 +163,8 @@ class GestureController:
         self._last_seen = t
 
         self._update_pause(gesture, t)
+        if not self.paused:
+            self._update_palm(gesture, t)
         if self.paused or gesture is Gesture.FIST:
             if self._left_down or self._gesture not in (Gesture.NONE, Gesture.FIST):
                 self.release_all()
@@ -193,6 +203,20 @@ class GestureController:
             self.paused = not self.paused
             self._fist_used = True
             self._event("PAUSED" if self.paused else "RESUMED", t)
+
+    def _update_palm(self, gesture: Gesture, t: float) -> None:
+        """Open palm held still long enough toggles the on-screen keyboard (once per hold)."""
+        if gesture is not Gesture.OPEN_PALM:
+            self._palm_since = None
+            self._palm_used = False
+            return
+        if self._palm_since is None:
+            self._palm_since = t
+        if not self._palm_used and t - self._palm_since >= config.KEYBOARD_TOGGLE_HOLD_S:
+            self._palm_used = True
+            self._event("KEYBOARD", t)
+            if self.on_keyboard_toggle is not None:
+                self.on_keyboard_toggle()
 
     def _anchor(self, t: float) -> tuple[int, int]:
         """Cursor position from CLICK_LOOKBACK_S ago (before the fingers started closing)."""
