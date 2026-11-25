@@ -47,6 +47,14 @@ from gesture_control.mouse import CursorMapper, WorkZone  # noqa: E402
 
 W, H = 1000, 1000
 DT = 1 / 30
+
+
+@pytest.fixture(autouse=True)
+def _press_click_mode(monkeypatch):
+    """This module covers CLICK_MODE "press" (button down as soon as the pinch is
+    recognized); the default "release" mode is covered in test_click_release.py."""
+    monkeypatch.setattr(config, "CLICK_MODE", "press")
+
 LEFT = G(config.LEFT_BUTTON_GESTURE)
 RIGHT = G(config.RIGHT_BUTTON_GESTURE)
 

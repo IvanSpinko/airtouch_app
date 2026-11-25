@@ -24,7 +24,7 @@ def test_log_roundtrip_and_replay(tmp_path):
 
     trace = replay(loaded, classifier=None)
     events = [r["event"] for r in trace if r["event"]]
-    assert events == ["LEFT DOWN", "LEFT CLICK"]
+    assert events == ["LEFT CLICK"]  # default CLICK_MODE "release": click on opening
 
 
 def test_logger_writes_each_event_once(tmp_path):
