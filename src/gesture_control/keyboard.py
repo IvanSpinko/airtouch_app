@@ -150,10 +150,14 @@ def check_clicks() -> bool:
     from pynput.mouse import Button, Controller
 
     print(f"running as administrator: {is_admin()}")
+    print("Do not touch the mouse or the keyboard window during the check.")
     if not open_keyboard():
         print("could not open osk.exe")
         return False
     time.sleep(config.OSK_CHECK_SETTLE_S)
+    if not is_open():
+        print("INVALID: the keyboard closed before the test click (closed by hand?). Run again.")
+        return False
     rect = wt.RECT()
     _user32.GetWindowRect(window(), ctypes.byref(rect))
     mouse = Controller()
@@ -161,7 +165,8 @@ def check_clicks() -> bool:
     mouse.position = (rect.right - config.OSK_CLOSE_BUTTON_DX, rect.top + config.OSK_CLOSE_BUTTON_DY)
     time.sleep(config.OSK_CHECK_SETTLE_S)
     mouse.click(Button.left)
-    closed = _wait(lambda: not is_open())
+    # Short wait: only a closure caused by our click counts.
+    closed = _wait(lambda: not is_open(), timeout=config.OSK_CHECK_RESULT_S)
     mouse.position = old
     if closed:
         print("OK: pynput clicks reach osk.exe")

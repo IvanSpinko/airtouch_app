@@ -298,6 +298,7 @@ OSK_POLL_S = 0.1
 OSK_CLOSE_BUTTON_DX = 25
 OSK_CLOSE_BUTTON_DY = 18
 OSK_CHECK_SETTLE_S = 0.5
+OSK_CHECK_RESULT_S = 1.5
 # Holding an open palm this long opens / closes the keyboard.
 KEYBOARD_TOGGLE_HOLD_S = 1.0
 # osk.exe only accepts our clicks when AirTouch runs as administrator; ask for it
