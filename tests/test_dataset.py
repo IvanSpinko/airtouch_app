@@ -16,10 +16,10 @@ def write(path, n_per_class=20):
 def test_roundtrip(tmp_path):
     path = tmp_path / "g.csv"
     lm = make_hand(("index", "middle"))
-    append_rows(path, [("point", "Left", "s1", lm)])
+    append_rows(path, [("l_pose", "Left", "s1", lm)])
     ds = load(path)
     assert len(ds) == 1
-    assert ds.labels[0] == config.GESTURE_CLASSES.index("point")
+    assert ds.labels[0] == config.GESTURE_CLASSES.index("l_pose")
     assert ds.handedness[0] == "Left"
     assert np.allclose(ds.landmarks[0], lm, atol=1e-5)
     assert ds.features().shape == (1, config.NUM_LANDMARKS * 3)

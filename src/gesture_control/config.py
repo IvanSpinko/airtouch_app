@@ -76,34 +76,26 @@ PALM_LANDMARKS = (LM_WRIST, LM_INDEX_MCP, LM_MIDDLE_MCP, LM_RING_MCP, LM_PINKY_M
 # --- Rule-based gestures ------------------------------------------------------
 # All distances are relative to the palm size (wrist -> middle finger MCP),
 # so thresholds do not depend on how far the hand is from the camera.
-# Fingertip distance -> pinch strength: touching (<= ON) = 1, apart (>= OFF) = 0.
-PINCH_ON_RATIO = 0.25
-PINCH_OFF_RATIO = 0.38
-# Button goes down when the pinch strength reaches ON, up when it drops below OFF.
-PINCH_STRENGTH_ON = 0.9
-PINCH_STRENGTH_OFF = 0.3
-# Consecutive pinch frames before it counts (filters single-frame glitches). Keep
-# this small: a quick tap lasts only 2-3 frames. The click still lands at the
-# pre-pinch spot thanks to CLICK_LOOKBACK_S.
-PINCH_CONFIRM_FRAMES = 2
-# Frames the fingers must stay open before a pinch is released (debounce).
-PINCH_RELEASE_FRAMES = 2
-# After the hand (re)appears, no new pinch for this many frames.
+# The thumb counts as straight (L pose) when its tip is this far from the middle
+# finger knuckle; bent in across the palm it is much closer.
+THUMB_EXTENDED_RATIO = 0.7
+# Click poses (thumb / index bent) must be seen this many frames in a row. Keep it
+# small: a quick bend lasts only a few frames.
+CLICK_POSE_FRAMES = 2
+# After the hand (re)appears, click poses are ignored for this many frames.
 ACQUIRE_GRACE_FRAMES = 6
 # A finger is extended if wrist->tip is longer than wrist->pip by this factor.
 FINGER_EXTENDED_RATIO = 1.15
 # Fist: every fingertip must be within this distance of the palm center.
 FIST_TIP_RATIO = 0.75
-# Open palm also requires the thumb to be far from the index fingertip.
-OPEN_PALM_THUMB_RATIO = 0.6
-# Static poses (fist, two fingers, palm, point) must be stable for this many frames.
+# Static poses (L, fist, palm, shaka...) must be stable for this many frames.
 POSE_STABLE_FRAMES = 3
 # Scroll pose ("two fingers") must be held longer, so the hand passing through it on
 # the way to a click does not scroll the page.
 SCROLL_STABLE_FRAMES = 6
 # Scroll pose: index and middle fingertips held together (gap below this) ...
 SCROLL_FINGERS_TOGETHER_RATIO = 0.35
-# ... and the thumb away from both fingertips (not getting ready to pinch).
+# ... and the thumb away from both fingertips.
 SCROLL_THUMB_AWAY_RATIO = 0.7
 # The detector keeps its state through this many frames without a hand, so a single
 # dropped frame does not end a drag.
@@ -112,23 +104,22 @@ HAND_LOST_GRACE_FRAMES = 5
 # --- Gesture classifier (stage 3) -------------------------------------------
 # Order matters: it is the label index used by the trained model.
 GESTURE_CLASSES = (
-    "none", "point", "pinch_index", "pinch_middle", "two_fingers", "fist", "open_palm",
+    "none", "l_pose", "thumb_bent", "index_bent", "two_fingers", "fist", "open_palm", "shaka",
 )
-GESTURE_DATA_PATH = DATA_DIR / "gestures.csv"
+GESTURE_DATA_PATH = DATA_DIR / "gestures_v2.csv"
+# Recordings of the first gesture set (pinches); unchanged poses are reused, see ml/migrate.py.
+GESTURE_DATA_V1_PATH = DATA_DIR / "gestures.csv"
+MIGRATE_V1_CLASSES = ("two_fingers", "fist", "open_palm")
 GESTURE_MODEL_PT = MODELS_DIR / "gesture.pt"      # PyTorch checkpoint (training)
 GESTURE_MODEL_NPZ = MODELS_DIR / "gesture.npz"    # numpy weights (runtime, no torch needed)
 GESTURE_TEST_SPLIT = MODELS_DIR / "test_split.npz"
 # Use the trained classifier at runtime when the model file exists.
 USE_CLASSIFIER = True
-# Static pose from the classifier is trusted only above this probability.
+# The model's pose is trusted only above this (smoothed) probability.
 CLASSIFIER_MIN_PROB = 0.6
-# Pinch strength (0..1, shown as a bar in the preview) combines the model's
-# probability with fingertip distance. Fingertip distance only counts if the model
-# gives that pinch at least this probability.
-CLASSIFIER_PINCH_MIN_PROB = 0.4
-# While a button is held, fingertip distance keeps it down only if the model still
-# gives the pinch at least this much (a fist has fingertips close too).
-CLASSIFIER_PINCH_HOLD_GATE = 0.15
+# Model probabilities are averaged over frames: new = a * frame + (1 - a) * old.
+# 0.5 ~ the last 3 frames; lower = steadier but slower to react.
+CLASSIFIER_SMOOTHING = 0.5
 
 # Recording (ml/record.py)
 RECORD_TARGET_PER_CLASS = 500
@@ -155,39 +146,36 @@ ML_AUG_NOISE = 0.02
 ML_TARGET_ACCURACY = 0.95
 
 # --- Mouse actions ------------------------------------------------------------
-# Which pinch acts as which mouse button ("pinch_index" or "pinch_middle").
-# The cursor follows the index knuckle, so bending the index finger for a click
-# does not move it.
-LEFT_BUTTON_GESTURE = "pinch_index"
-RIGHT_BUTTON_GESTURE = "pinch_middle"
-# Closing the pinch drags the fingertip; the click lands where the cursor was this
-# long before the pinch was recognized.
+# The cursor moves only in this pose ("clutch"): index + thumb straight, the rest
+# folded. Any other pose leaves it where it is, like letting go of a mouse.
+CURSOR_GESTURE = "l_pose"
+# From the L pose: bending the thumb is the left button, bending the index finger
+# the right button. The cursor follows the index knuckle, which neither moves.
+LEFT_BUTTON_GESTURE = "thumb_bent"
+RIGHT_BUTTON_GESTURE = "index_bent"
+# A click counts when the hand returns to the L pose. After a fist (on its way in
+# or out the hand passes through both bent poses) clicks are ignored this long.
+AFTER_FIST_CLICK_GUARD_S = 0.5
+# The click lands where the cursor was this long before the bend was recognized.
 CLICK_LOOKBACK_S = 0.15
 # How much cursor history to keep for the lookback, s.
 CURSOR_HISTORY_S = 1.0
-# While pinched, the cursor stays put; it becomes a drag only once the pinch has
-# been held at least DRAG_MIN_HOLD_S AND the smoothed cursor moved DRAG_START_PX.
-# A quick pinch is therefore always a clean click, never a tiny drag/selection.
+# Left button: a quick thumb bend clicks when the thumb straightens again - the
+# button is never held down by it, so a false bend cannot drag or select. Keeping
+# the thumb bent for DRAG_ARM_S presses the button ("DRAG READY"); moving the hand
+# DRAG_START_PX (smoothed cursor) then drags, straightening the thumb drops.
 DRAG_START_PX = 60
-DRAG_MIN_HOLD_S = 0.3
-# Left click style:
-# "release": a quick pinch clicks when the fingers open, the button is never held
-#            down by it — a false pinch cannot drag or select. Holding the pinch
-#            still for DRAG_ARM_S presses the button ("DRAG READY") for dragging.
-# "press":   the button goes down as soon as the pinch is recognized.
-CLICK_MODE = "release"
 DRAG_ARM_S = 0.4
-# While a pinch is building up (strength at least this), the cursor stops moving,
-# so the click lands where you aimed and nothing gets selected on the way.
-CURSOR_FREEZE_PINCH_LEVEL = 0.5
+# While a click pose is building up (strength at least this), the cursor stops, so
+# the click lands where you aimed.
+CURSOR_FREEZE_CLICK_LEVEL = 0.5
 # Safety: a left button held this long without dragging is released (prevents a
 # stuck button from an accidental press).
 LEFT_HOLD_STILL_MAX_S = 2.0
-# Right click fires only after the right pinch is held this long, so a hand
-# passing through that pose does not open context menus.
-RIGHT_CLICK_MIN_HOLD_S = 0.15
+# A bend must last at least this long to click (filters passing flickers).
+CLICK_MIN_HOLD_S = 0.06
 # After a click the cursor stays frozen this long (unless the hand moves more than
-# DRAG_START_PX), so two quick pinches land in one spot and make a double click.
+# DRAG_START_PX), so two quick clicks land in one spot and make a double click.
 CLICK_SETTLE_S = 0.35
 # Scroll mode:
 # "auto": like pressing the mouse wheel — the spot where the two-finger pose starts
@@ -299,7 +287,8 @@ OSK_CLOSE_BUTTON_DX = 25
 OSK_CLOSE_BUTTON_DY = 18
 OSK_CHECK_SETTLE_S = 0.5
 OSK_CHECK_RESULT_S = 1.5
-# Holding an open palm this long opens / closes the keyboard.
+# Holding this pose (only thumb + pinky out) opens / closes the keyboard.
+KEYBOARD_GESTURE = "shaka"
 KEYBOARD_TOGGLE_HOLD_S = 1.0
 # osk.exe only accepts our clicks when AirTouch runs as administrator; ask for it
 # (UAC prompt) on start. --no-admin skips it (keyboard clicks will not work).
@@ -332,8 +321,8 @@ REPLAY_MARK_WINDOW_S = 3.0
 
 # --- Preview window (debug, until the PyQt overlay exists) --------------------
 SHOW_PREVIEW = True
-# Show raw thumb-fingertip distances in the preview (for tuning PINCH_ON/OFF_RATIO).
-PREVIEW_SHOW_PINCH_DEBUG = False
+# Show raw rule features in the preview (for tuning THUMB_EXTENDED_RATIO etc.).
+PREVIEW_SHOW_FEATURES = False
 # Pinch strength bars (bottom-left of the preview): size in px and colors.
 PREVIEW_METER_WIDTH = 160
 PREVIEW_METER_HEIGHT = 14

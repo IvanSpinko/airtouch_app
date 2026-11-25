@@ -5,7 +5,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from handgen import ALL, FIST_THUMB, make_hand  # noqa: E402
+from handgen import POSE_KWARGS, make_hand  # noqa: E402
 
 from gesture_control import config  # noqa: E402
 from gesture_control.gestures import GestureClassifier, normalize_landmarks  # noqa: E402
@@ -13,15 +13,7 @@ from ml.dataset import append_rows, load  # noqa: E402
 from ml.evaluate import evaluate  # noqa: E402
 from ml.train import build_model, train  # noqa: E402
 
-POSES = {
-    "none": dict(extended=("ring", "pinky")),
-    "point": dict(extended=("index",)),
-    "pinch_index": dict(extended=("index",), thumb_tip="index"),
-    "pinch_middle": dict(extended=("index", "middle"), thumb_tip="middle"),
-    "two_fingers": dict(extended=("index", "middle")),
-    "fist": dict(extended=(), thumb_tip=FIST_THUMB),
-    "open_palm": dict(extended=ALL),
-}
+POSES = POSE_KWARGS  # one synthetic hand per gesture class
 
 
 def synthetic_rows(n_per_class, rng):

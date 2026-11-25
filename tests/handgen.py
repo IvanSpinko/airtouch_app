@@ -57,3 +57,21 @@ def make_hand(
 
 FIST_THUMB = (0.47, 0.76)
 ALL = ("index", "middle", "ring", "pinky")
+# Thumb tip bent in across the palm (left-click pose), square units.
+THUMB_IN = (0.50, 0.77)
+
+# One synthetic hand per gesture class of the current gesture set.
+POSE_KWARGS = {
+    "none": dict(extended=("ring", "pinky")),
+    "l_pose": dict(extended=("index",)),
+    "thumb_bent": dict(extended=("index",), thumb_tip=THUMB_IN),
+    "index_bent": dict(extended=()),
+    "two_fingers": dict(extended=("index", "middle")),
+    "fist": dict(extended=(), thumb_tip=FIST_THUMB),
+    "open_palm": dict(extended=ALL),
+    "shaka": dict(extended=("pinky",)),
+}
+
+
+def pose(name, **kw):
+    return make_hand(**{**POSE_KWARGS[name], **kw})

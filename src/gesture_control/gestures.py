@@ -1,10 +1,20 @@
 """Gesture recognition from the 21 hand landmarks.
 
-Stage 2: rule-based detector (pinches by distance thresholds with hysteresis, static
-poses by which fingers are extended). Stage 3 adds a trained classifier on top.
+Gesture set (stage 4 redesign, chosen to be easy for MediaPipe to tell apart - big
+finger movements instead of fingertip contact):
 
-All measurements are 3D, normalized by palm size, so they do not depend on the distance
-to the camera, and they are symmetric, so left and right hands work the same way.
+- ``l_pose``      index + thumb straight, other fingers folded ("L") - moves the cursor
+- ``thumb_bent``  from L, the thumb bends in - left click / drag
+- ``index_bent``  from L, the index finger bends - right click
+- ``two_fingers`` index + middle together, thumb tucked - scroll
+- ``fist``        pause
+- ``shaka``       only thumb + pinky out - on-screen keyboard
+- ``open_palm``   resting hand (does nothing)
+- ``none``        anything else
+
+Rules work without a model; a trained classifier (stage 3) takes over when present.
+All measurements are 3D and normalized by palm size, and left hands are mirrored
+onto right ones, so distance to the camera and the hand used do not matter.
 
 Check: ``python -m gesture_control.gestures`` shows the recognized gesture live.
 """
@@ -21,12 +31,13 @@ from gesture_control import config
 
 class Gesture(str, Enum):
     NONE = "none"
-    POINT = "point"                # index finger extended — move the cursor
-    PINCH_INDEX = "pinch_index"    # thumb + index (left button by default)
-    PINCH_MIDDLE = "pinch_middle"  # thumb + middle (right button by default)
-    TWO_FINGERS = "two_fingers"    # index + middle extended together — scroll
-    FIST = "fist"                  # pause
-    OPEN_PALM = "open_palm"        # reserved for the on-screen keyboard (stage 4)
+    L_POSE = "l_pose"
+    THUMB_BENT = "thumb_bent"
+    INDEX_BENT = "index_bent"
+    TWO_FINGERS = "two_fingers"
+    FIST = "fist"
+    OPEN_PALM = "open_palm"
+    SHAKA = "shaka"
 
 
 @dataclass(frozen=True)
@@ -40,14 +51,17 @@ class HandFeatures:
     max_tip_spread: float
     # Distance between index and middle fingertips.
     index_middle_gap: float = 0.0
+    # Thumb tip distance from the middle-finger knuckle: large when the thumb sticks
+    # out (L pose), small when it is bent in across the palm.
+    thumb_reach: float = 0.0
 
     @property
     def extended_count(self) -> int:
         return sum(self.extended.values())
 
-    def distance(self, pinch: "Gesture") -> float:
-        """Thumb-tip distance to the fingertip of the given pinch."""
-        return self.pinch_index if pinch is Gesture.PINCH_INDEX else self.pinch_middle
+    @property
+    def thumb_out(self) -> bool:
+        return self.thumb_reach > config.THUMB_EXTENDED_RATIO
 
     @property
     def is_fist(self) -> bool:
@@ -89,6 +103,7 @@ def compute_features(landmarks: np.ndarray, aspect: float = config.FRAME_ASPECT)
         extended=extended,
         max_tip_spread=spread,
         index_middle_gap=dist(config.LM_INDEX_TIP, config.LM_MIDDLE_TIP) / palm,
+        thumb_reach=dist(config.LM_THUMB_TIP, config.LM_MIDDLE_MCP) / palm,
     )
 
 
@@ -133,7 +148,14 @@ class GestureClassifier:
 
     @classmethod
     def load_if_available(cls, path=config.GESTURE_MODEL_NPZ) -> "GestureClassifier | None":
-        return cls(path) if config.USE_CLASSIFIER and path.exists() else None
+        if not (config.USE_CLASSIFIER and path.exists()):
+            return None
+        classes = tuple(str(c) for c in np.load(path, allow_pickle=False)["classes"])
+        if classes != tuple(config.GESTURE_CLASSES):
+            print(f"Ignoring {path.name}: it was trained for another gesture set. "
+                  "Record and retrain: python -m ml.record, python -m ml.train")
+            return None
+        return cls(path)
 
     def predict_proba(self, features: np.ndarray) -> np.ndarray:
         h = np.asarray(features, dtype=np.float32)
@@ -151,146 +173,92 @@ class GestureClassifier:
 
 
 def classify_pose(f: HandFeatures) -> Gesture:
-    """Static pose from finger states (no pinch logic, no history)."""
+    """Pose from finger states (rules, no history). Used when there is no model."""
     e = f.extended
-    if f.is_fist:
+    folded3 = not (e["middle"] or e["ring"] or e["pinky"])
+    if f.is_fist and not f.thumb_out:
         return Gesture.FIST
-    if f.extended_count == 4 and f.pinch_index > config.OPEN_PALM_THUMB_RATIO:
+    if f.thumb_out and e["pinky"] and not (e["index"] or e["middle"] or e["ring"]):
+        return Gesture.SHAKA
+    if f.extended_count == 4 and f.thumb_out:
         return Gesture.OPEN_PALM
     if (
         e["index"] and e["middle"] and not e["ring"] and not e["pinky"]
-        # Fingers together and thumb away: otherwise this is the hand getting ready
-        # for a pinch, which looks the same by finger states alone.
+        # Fingers together and thumb away from both tips.
         and f.index_middle_gap < config.SCROLL_FINGERS_TOGETHER_RATIO
         and min(f.pinch_index, f.pinch_middle) > config.SCROLL_THUMB_AWAY_RATIO
     ):
         return Gesture.TWO_FINGERS
-    if e["index"]:
-        return Gesture.POINT
+    if e["index"] and folded3:
+        return Gesture.L_POSE if f.thumb_out else Gesture.THUMB_BENT
+    if not e["index"] and folded3 and f.thumb_out:
+        return Gesture.INDEX_BENT
     return Gesture.NONE
 
 
-PINCHES = (Gesture.PINCH_INDEX, Gesture.PINCH_MIDDLE)
-
-
-def distance_strength(d: float) -> float:
-    """1 when the fingertips touch (<= PINCH_ON_RATIO), 0 when apart (>= PINCH_OFF_RATIO)."""
-    on, off = config.PINCH_ON_RATIO, config.PINCH_OFF_RATIO
-    return min(max((off - d) / (off - on), 0.0), 1.0)
-
-
-def pinch_strength(
-    pinch: Gesture, f: HandFeatures, probs: dict[Gesture, float] | None, gate: bool = True
-) -> float:
-    """How strongly the hand shows ``pinch``, 0..1.
-
-    - no model: fingertip distance only;
-    - with a model: the model's probability, or the distance strength if the model
-      at least half agrees (fingertips touching from an odd angle can look like a
-      pinch to the rule but not to the model — no click then).
-      Holding an already started pinch (``gate=False``) only needs the model to
-      give it CLASSIFIER_PINCH_HOLD_GATE, so a drag survives a model wobble while
-      the fingertips stay together — but a curled hand or fist, where fingertips
-      are close anyway, does not keep the button down.
-    """
-    rule = distance_strength(f.distance(pinch))
-    if probs is None:
-        return rule
-    p = probs.get(pinch, 0.0)
-    gate_prob = config.CLASSIFIER_PINCH_MIN_PROB if gate else config.CLASSIFIER_PINCH_HOLD_GATE
-    if p < gate_prob:
-        rule = 0.0
-    return max(p, rule)
+CLICK_POSES = (Gesture.THUMB_BENT, Gesture.INDEX_BENT)
 
 
 class GestureDetector:
-    """Stateful detector: pinch strength with hysteresis + debounced static poses.
+    """Stateful detector: smoothed model probabilities + debounced poses.
 
-    With a trained ``classifier`` (stage 3) static poses come from the model when it
-    is confident, and the pinch strength combines the model with fingertip distance
-    (see ``pinch_strength``). Without a model the rule-based logic is used alone.
+    - With a trained ``classifier`` the pose is the model's top class (averaged
+      over the last frames, ``CLASSIFIER_SMOOTHING``) when it is confident, else
+      the rules decide.
+    - A pose must be seen for a few frames in a row before it counts: click poses
+      ``CLICK_POSE_FRAMES``, scroll ``SCROLL_STABLE_FRAMES``, others
+      ``POSE_STABLE_FRAMES``.
+    - Right after the hand appears its landmarks are unreliable, so click poses
+      are ignored for ``ACQUIRE_GRACE_FRAMES``.
     """
 
     def __init__(self, classifier: GestureClassifier | None = None) -> None:
         self.classifier = classifier
         self.probs: dict[Gesture, float] | None = None
         self.features: HandFeatures | None = None
-        # Current pinch strength per finger (0..1), for the preview meter.
-        self.strength: dict[Gesture, float] = {g: 0.0 for g in PINCHES}
+        # How strongly each click pose is shown (0..1), for the preview bars.
+        self.strength: dict[Gesture, float] = {g: 0.0 for g in CLICK_POSES}
         self.reset()
 
     def reset(self) -> None:
         self._lost_frames = 0
         self._seen_frames = 0
-        self._release_frames = 0
         self._last = Gesture.NONE
-        self._pinch: Gesture | None = None
-        self._pinch_votes = {g: 0 for g in PINCHES}
-        self._pinch_frames = 0
+        self._smoothed: dict[Gesture, float] | None = None
         self._pose = Gesture.NONE
         self._pose_candidate = Gesture.NONE
         self._pose_frames = 0
 
-    def _update_pinch(self, f: HandFeatures) -> Gesture | None:
-        """Pinch state machine on a single 0..1 pinch strength per finger.
-
-        Pressed when the strength reaches PINCH_STRENGTH_ON for PINCH_CONFIRM_FRAMES
-        frames, released once it stays below PINCH_STRENGTH_OFF for
-        PINCH_RELEASE_FRAMES frames.
-        """
-        if self._pinch is not None:
-            held = pinch_strength(self._pinch, f, self.probs, gate=False)
-            self.strength[self._pinch] = held
-            if held >= config.PINCH_STRENGTH_OFF:
-                self._release_frames = 0
-                return self._pinch
-            # Release only after a few open frames, so a flicker mid-drag does not
-            # drop the item or turn one click into two.
-            self._release_frames += 1
-            if self._release_frames < config.PINCH_RELEASE_FRAMES:
-                return self._pinch
-            self._pinch = None
-            self._release_frames = 0
-
-        # Right after the hand appears its landmarks are unreliable: no new clicks.
-        acquiring = self._seen_frames <= config.ACQUIRE_GRACE_FRAMES
-        best = max(PINCHES, key=lambda g: (self.strength[g], -f.distance(g)))
-        candidate = None
-        if not acquiring and self.strength[best] >= config.PINCH_STRENGTH_ON:
-            candidate = best
-        if candidate is None:
-            self._pinch_frames = 0
-            self._pinch_votes = {g: 0 for g in PINCHES}
-            return self._pinch
-        # Count consecutive frames of *any* pinch: with the thumb between index and
-        # middle the stronger finger can flip from frame to frame, which must not
-        # restart the count. The type is decided by majority when confirmed.
-        self._pinch_frames += 1
-        self._pinch_votes[candidate] += 1
-        if self._pinch_frames >= config.PINCH_CONFIRM_FRAMES:
-            self._pinch = max(PINCHES, key=lambda g: (self._pinch_votes[g], g is candidate))
-            self._pinch_frames = 0
-            self._pinch_votes = {g: 0 for g in PINCHES}
-        return self._pinch
+    def _smooth(self, probs: dict[Gesture, float]) -> dict[Gesture, float]:
+        """Exponential average over frames: one odd frame cannot flip the pose."""
+        a = config.CLASSIFIER_SMOOTHING
+        if self._smoothed is None:
+            self._smoothed = dict(probs)
+        else:
+            self._smoothed = {
+                g: a * p + (1 - a) * self._smoothed.get(g, p) for g, p in probs.items()
+            }
+        return self._smoothed
 
     def _raw_pose(self, f: HandFeatures) -> Gesture:
         if self.probs is not None:
             top = max(self.probs, key=self.probs.get)
-            # Pinches are handled by the threshold path; for the pose they are pointing.
             if self.probs[top] >= config.CLASSIFIER_MIN_PROB:
-                return Gesture.POINT if top in PINCHES else top
+                return top
         return classify_pose(f)
 
-    def _update_pose(self, f: HandFeatures) -> Gesture:
-        raw = self._raw_pose(f)
+    def _update_pose(self, raw: Gesture) -> Gesture:
         if raw is self._pose_candidate:
             self._pose_frames += 1
         else:
             self._pose_candidate = raw
             self._pose_frames = 1
-        needed = (
-            config.SCROLL_STABLE_FRAMES if raw is Gesture.TWO_FINGERS else config.POSE_STABLE_FRAMES
-        )
+        if raw is Gesture.TWO_FINGERS:
+            needed = config.SCROLL_STABLE_FRAMES
+        elif raw in CLICK_POSES:
+            needed = config.CLICK_POSE_FRAMES
+        else:
+            needed = config.POSE_STABLE_FRAMES
         if self._pose_frames >= needed:
             self._pose = raw
         return self._pose
@@ -305,26 +273,18 @@ class GestureDetector:
         self._seen_frames += 1
         f = compute_features(landmarks)
         self.features = f
-        self.probs = self.classifier.predict(landmarks, handedness) if self.classifier else None
-        self.strength = {g: pinch_strength(g, f, self.probs) for g in PINCHES}
-        pose = self._update_pose(f)
-        # A fist brings all fingertips close to the thumb, so it must never count as
-        # a pinch — checked on the raw current frame, not the debounced pose, so a
-        # click cannot slip through while the fist is still being confirmed.
-        # The rule cannot tell a fist from a pinch made with the other fingers curled
-        # in, so with a trained model the model decides.
+        self.probs = (
+            self._smooth(self.classifier.predict(landmarks, handedness))
+            if self.classifier else None
+        )
+        raw = self._raw_pose(f)
         if self.probs is not None:
-            fist_like = self.probs.get(Gesture.FIST, 0.0) >= config.CLASSIFIER_MIN_PROB
+            self.strength = {g: self.probs.get(g, 0.0) for g in CLICK_POSES}
         else:
-            fist_like = f.is_fist
-        if fist_like:
-            self._pinch = None
-            self._pinch_votes = {g: 0 for g in PINCHES}
-            self._pinch_frames = 0
-            self._last = pose
-            return pose
-        pinch = self._update_pinch(f)
-        self._last = pinch if pinch is not None else pose
+            self.strength = {g: float(raw is g) for g in CLICK_POSES}
+        if raw in CLICK_POSES and self._seen_frames <= config.ACQUIRE_GRACE_FRAMES:
+            raw = Gesture.NONE
+        self._last = self._update_pose(raw)
         return self._last
 
 
@@ -350,10 +310,7 @@ def _demo() -> None:
             if hand is not None:
                 draw_hand(frame, hand)
                 f = compute_features(hand.landmarks)
-                text += (
-                    f"  pi={f.pinch_index:.2f} pm={f.pinch_middle:.2f}"
-                    f" gap={f.index_middle_gap:.2f}"
-                )
+                text += f"  thumb={f.thumb_reach:.2f} gap={f.index_middle_gap:.2f}"
             cv2.putText(
                 frame, text, config.PREVIEW_TEXT_ORIGIN, cv2.FONT_HERSHEY_SIMPLEX,
                 config.PREVIEW_FONT_SCALE, config.COLOR_TEXT_ACTIVE, config.PREVIEW_FONT_THICKNESS,
