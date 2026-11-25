@@ -356,6 +356,10 @@ CALIB_TARGET_GAIN = 1.5
 CALIB_CUTOFF_REF = 1.5
 CALIB_MIN_JITTER_PX = 0.5
 CALIB_DEADZONE_FACTOR = 2.0
+CALIB_SAMPLE_MS = 33           # how often the window samples the hand
+CALIB_PROGRESS_STEPS = 100
+CALIB_DIALOG_WIDTH = 460
+SETTINGS_DECIMALS = 3
 
 # --- Session log (python -m gesture_control.main --log) ------------------------
 SESSION_LOG_NAME = "session-%Y%m%d-%H%M%S.csv"
