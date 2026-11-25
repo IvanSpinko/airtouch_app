@@ -10,11 +10,13 @@ Run: ``python -m gesture_control.main``
 from __future__ import annotations
 
 import argparse
+import sys
+import threading
 
 import cv2
 import numpy as np
 
-from gesture_control import config
+from gesture_control import config, keyboard
 from gesture_control.camera import Camera, FpsCounter
 from gesture_control.controller import ControlState, GestureController, HotkeyListener
 from gesture_control.gestures import Gesture, GestureClassifier, GestureDetector, HandFeatures
@@ -28,6 +30,11 @@ def recent_event(ctl: GestureController, now: float) -> str | None:
     if ctl.last_event and now - ctl.last_event[1] <= config.PREVIEW_EVENT_FLASH_S:
         return ctl.last_event[0]
     return None
+
+
+def toggle_keyboard_async() -> None:
+    """Opening osk.exe takes ~1 s; do it off the main loop so tracking keeps running."""
+    threading.Thread(target=keyboard.toggle, name="keyboard", daemon=True).start()
 
 
 def status_line(enabled: bool, ctl: GestureController) -> tuple[str, tuple[int, int, int]]:
@@ -92,7 +99,7 @@ def draw_preview(
     status: tuple[str, tuple[int, int, int]], fps: float, scroll_anchor: float | None = None,
     model_conf: float | None = None, features: HandFeatures | None = None,
     meters: tuple[dict[Gesture, float], Gesture, Gesture, Gesture] | None = None,
-    event: str | None = None,
+    event: str | None = None, keyboard_open: bool = False,
 ) -> np.ndarray:
     out = frame.copy()
     h, w = out.shape[:2]
@@ -125,7 +132,7 @@ def draw_preview(
         f"FPS: {fps:.1f}",
         f"Hand: {hand.handedness if hand else '-'}",
         f"Gesture: {gesture.value}" + (f" ({model_conf:.0%})" if model_conf is not None else ""),
-        text,
+        text + ("  |  Keyboard" if keyboard_open else ""),
     ]
     if config.PREVIEW_SHOW_PINCH_DEBUG and hand is not None and features is not None:
         # Pinch distances vs the click threshold: below it = pinched.
@@ -156,7 +163,9 @@ def run(log: bool = False) -> None:
     animator = CursorAnimator(mouse)
     classifier = GestureClassifier.load_if_available()
     detector = GestureDetector(classifier)
-    ctl = GestureController(mapper, animator, mouse)
+    ctl = GestureController(mapper, animator, mouse, on_keyboard_toggle=toggle_keyboard_async)
+    if not keyboard.is_admin():
+        print("Not running as administrator: on-screen keyboard clicks will be blocked by Windows.")
     state = ControlState()
     state.subscribe(lambda on: print("Control", "enabled" if on else "disabled"))
     fps = FpsCounter()
@@ -214,6 +223,7 @@ def run(log: bool = False) -> None:
                             detector.features,
                             (detector.strength, gesture, ctl.left_gesture, ctl.right_gesture),
                             recent_event(ctl, ts),
+                            keyboard.is_open(),
                         ),
                     )
                     key = cv2.waitKey(config.PREVIEW_WAIT_KEY_MS) & 0xFF
@@ -237,11 +247,31 @@ def main() -> None:
         "--log", action="store_true",
         help="save landmarks and mouse actions to data/ for diagnosing false clicks",
     )
+    parser.add_argument(
+        "--no-admin", action="store_true",
+        help="do not ask for administrator rights (on-screen keyboard clicks will not work)",
+    )
+    # set on the elevated copy: it has its own console window, keep it open at the end
+    parser.add_argument("--elevated", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if config.RUN_AS_ADMIN and not args.no_admin and not keyboard.is_admin():
+        # osk.exe ignores input from normal-rights processes (UIPI), see keyboard.py.
+        if keyboard.relaunch_as_admin([*sys.argv[1:], "--elevated"]):
+            print("Restarted as administrator in a new window.")
+            return
+        print("Administrator rights declined: continuing without on-screen keyboard clicks.")
     try:
         run(log=args.log)
     except KeyboardInterrupt:
         pass
+    except Exception:
+        if not args.elevated:
+            raise
+        import traceback
+
+        traceback.print_exc()
+    if args.elevated:
+        input("Press Enter to close this window...")
 
 
 if __name__ == "__main__":
