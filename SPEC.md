@@ -122,7 +122,7 @@ Each stage ends with a working version that can be demonstrated.
 - [x] **4. Keyboard via osk.exe.** Done when a gesture opens and closes the Windows on-screen
   keyboard and you can type and send a message using gestures only. Measure typing speed (WPM).
   Measured: 4.3 WPM on the first attempt (target refined, see non-functional requirements).
-- [ ] **5. Settings and packaging.** Done when there is calibration, a tray icon and an `.exe`
+- [x] **5. Settings and packaging.** Done when there is calibration, a tray icon and an `.exe`
   that runs on a clean Windows install.
 
 Later, optionally: a custom PyQt6 keyboard with large keys and cursor snapping (compare typing
