@@ -318,6 +318,31 @@ WM_CLOSE = 0x0010
 # pynput.keyboard.GlobalHotKeys format.
 HOTKEY_TOGGLE = "<ctrl>+<alt>+g"
 
+# --- Tray app and indicator (stage 5) -------------------------------------------
+SHOW_INDICATOR = True
+UI_REFRESH_MS = 66             # indicator / tray update period (~15 Hz)
+ENGINE_STOP_TIMEOUT_S = 3.0
+SELF_TEST_FILE = "selftest.txt"  # written to APP_DATA_DIR by --self-test
+# Status colors (tray icon, indicator text).
+STATUS_COLOR_ON = "#2ecc71"
+STATUS_COLOR_PAUSED = "#f1c40f"
+STATUS_COLOR_OFF = "#95a5a6"
+STATUS_COLOR_ERROR = "#e74c3c"
+ICON_SIZE = 64
+ICON_LETTER_COLOR = "#ffffff"
+ICON_LETTER_SCALE = 0.6
+# Indicator window: size, position margin from the screen corner, look.
+INDICATOR_WIDTH = 260
+INDICATOR_HEIGHT = 56
+INDICATOR_MARGIN = 12
+INDICATOR_PAD = 12
+INDICATOR_DOT = 16
+INDICATOR_RADIUS = 10
+INDICATOR_FONT_PX = 15
+INDICATOR_BACKGROUND = "#cc202020"   # ARGB: translucent dark
+INDICATOR_TEXT = "#ffffff"
+OVERLAY_DEMO_STEP_MS = 1200
+
 # --- Session log (python -m gesture_control.main --log) ------------------------
 SESSION_LOG_NAME = "session-%Y%m%d-%H%M%S.csv"
 SESSION_MARK_KEY = ord("m")

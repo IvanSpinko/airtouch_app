@@ -24,6 +24,7 @@ import sys
 import time
 import winreg
 from dataclasses import dataclass
+from pathlib import Path
 
 from gesture_control import config
 
@@ -36,16 +37,25 @@ def is_admin() -> bool:
         return False
 
 
-def relaunch_as_admin(args: list[str]) -> bool:
-    """Starts ``python -m gesture_control.main <args>`` elevated (UAC prompt).
+def relaunch_as_admin(args: list[str], module: str = "gesture_control.main") -> bool:
+    """Starts this app again elevated (UAC prompt) with the same arguments.
 
+    From source it runs ``python -m <module> <args>`` (``pythonw`` for the tray app,
+    which needs no console); a built AirTouch.exe simply restarts itself.
     Returns True if the elevated copy was started (the caller should exit),
     False if the user declined the prompt or it failed.
     """
-    params = subprocess.list2cmdline(["-m", "gesture_control.main", *args])
-    result = ctypes.windll.shell32.ShellExecuteW(
-        None, "runas", sys.executable, params, str(config.PROJECT_ROOT), config.SW_SHOWNORMAL
-    )
+    if getattr(sys, "frozen", False):
+        exe, params, cwd = sys.executable, subprocess.list2cmdline(args), None
+    else:
+        exe = sys.executable
+        windowless = Path(sys.executable).with_name("pythonw.exe")
+        if module.endswith(".app") and windowless.exists():
+            exe = str(windowless)
+        params = subprocess.list2cmdline(["-m", module, *args])
+        cwd = str(config.PROJECT_ROOT)
+    result = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, params, cwd,
+                                                 config.SW_SHOWNORMAL)
     return int(result) > config.SHELL_EXECUTE_OK
 
 
