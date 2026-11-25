@@ -1,7 +1,9 @@
 """Entry point: camera -> hand tracking -> gestures -> mouse.
 
-The cursor follows the base of the index finger; pinches click and drag,
-two fingers scroll, a held fist pauses. Ctrl+Alt+G instantly disables/enables control.
+In the L pose (index + thumb straight) the cursor follows the base of the index
+finger; bending the thumb clicks / drags, bending the index right-clicks, two fingers
+scroll, a held fist pauses, a held shaka opens the on-screen keyboard.
+Ctrl+Alt+G instantly disables/enables control.
 Press q or Esc in the preview window (or Ctrl+C in the console) to quit.
 
 Run: ``python -m gesture_control.main``
@@ -59,12 +61,13 @@ def draw_edge_warning(frame: np.ndarray, sides: set[str]) -> None:
         cv2.rectangle(frame, *bars[side], config.COLOR_EDGE_WARN, cv2.FILLED)
 
 
-def draw_pinch_meters(
+def draw_click_meters(
     frame: np.ndarray, strength: dict[Gesture, float], held: Gesture,
     left: Gesture, right: Gesture,
 ) -> None:
-    """Pinch strength bars: the button goes down when a bar crosses the yellow
-    line (PINCH_STRENGTH_ON) and up when it falls below the orange one (OFF)."""
+    """Click pose bars (L = thumb bent, R = index bent): the pose counts once its
+    bar crosses the yellow line (CLASSIFIER_MIN_PROB); the cursor stops above the
+    orange one (CURSOR_FREEZE_CLICK_LEVEL)."""
     h = frame.shape[0]
     w, bh, gap, m = (config.PREVIEW_METER_WIDTH, config.PREVIEW_METER_HEIGHT,
                      config.PREVIEW_METER_GAP, config.PREVIEW_METER_MARGIN)
@@ -78,8 +81,8 @@ def draw_pinch_meters(
         fill = int(w * min(max(strength.get(g, 0.0), 0.0), 1.0))
         color = config.COLOR_METER_ACTIVE if held is g else config.COLOR_METER_FILL
         cv2.rectangle(frame, (x, y), (x + fill, y + bh), color, cv2.FILLED)
-        for level, c in ((config.PINCH_STRENGTH_ON, config.COLOR_METER_ON),
-                         (config.PINCH_STRENGTH_OFF, config.COLOR_METER_OFF)):
+        for level, c in ((config.CLASSIFIER_MIN_PROB, config.COLOR_METER_ON),
+                         (config.CURSOR_FREEZE_CLICK_LEVEL, config.COLOR_METER_OFF)):
             lx = x + int(w * level)
             cv2.line(frame, (lx, y - 2), (lx, y + bh + 2), c, 2)
 
@@ -134,13 +137,13 @@ def draw_preview(
         f"Gesture: {gesture.value}" + (f" ({model_conf:.0%})" if model_conf is not None else ""),
         text + ("  |  Keyboard" if keyboard_open else ""),
     ]
-    if config.PREVIEW_SHOW_PINCH_DEBUG and hand is not None and features is not None:
-        # Pinch distances vs the click threshold: below it = pinched.
+    if config.PREVIEW_SHOW_FEATURES and hand is not None and features is not None:
         lines.append(
-            f"thumb-index {features.pinch_index:.2f}  thumb-middle {features.pinch_middle:.2f}"
+            f"thumb reach {features.thumb_reach:.2f} (out > {config.THUMB_EXTENDED_RATIO})"
+            f"  index-middle gap {features.index_middle_gap:.2f}"
         )
     if meters is not None and hand is not None:
-        draw_pinch_meters(out, *meters)
+        draw_click_meters(out, *meters)
     if event:
         draw_event(out, event)
     ox, oy = config.PREVIEW_TEXT_ORIGIN

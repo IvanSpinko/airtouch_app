@@ -6,7 +6,7 @@ and press ``m`` in the preview right after a false click.
 
 Prints the mouse actions the current code produces for the recorded hand movement
 (no mouse is touched), and for every MARK a frame-by-frame trace of the moments
-before it — gesture, pinch strengths and what the model saw — to see what caused it.
+before it - gesture, click-pose strengths and what the model saw - to see what caused it.
 """
 
 from __future__ import annotations

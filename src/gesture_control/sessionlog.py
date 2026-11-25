@@ -2,7 +2,7 @@
 
 ``python -m gesture_control.main --log`` writes one row per frame to
 ``data/session-<time>.csv``: time, hand landmarks (no images), recognized gesture,
-pinch strengths and the mouse action of that frame. Pressing ``m`` in the preview
+click-pose strengths and the mouse action of that frame. Pressing ``m`` in the preview
 adds a MARK row ("something went wrong here"). ``python -m ml.replay`` replays the
 log through the current code.
 """
