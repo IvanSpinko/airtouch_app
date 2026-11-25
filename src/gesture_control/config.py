@@ -343,6 +343,20 @@ INDICATOR_BACKGROUND = "#cc202020"   # ARGB: translucent dark
 INDICATOR_TEXT = "#ffffff"
 OVERLAY_DEMO_STEP_MS = 1200
 
+# --- Calibration (tray menu) ----------------------------------------------------
+CALIB_MOVE_S = 8.0            # step 1: sweep the L pose over the comfortable area
+CALIB_HOLD_S = 3.0            # step 2: hold the hand still
+CALIB_MIN_SAMPLES = 30
+CALIB_RANGE_PERCENTILES = (5, 95)   # ignore the outer few percent of the sweep
+CALIB_MIN_RANGE = 0.02        # guards against division by ~0 for a tiny sweep
+# The comfortable area should cover the screen at this point of the acceleration
+# curve (between ACCEL_MIN_GAIN and ACCEL_MAX_GAIN): a medium-speed sweep.
+CALIB_TARGET_GAIN = 1.5
+# Smoothing from tremor: min_cutoff = REF / jitter_px, dead zone = jitter * min gain * FACTOR.
+CALIB_CUTOFF_REF = 1.5
+CALIB_MIN_JITTER_PX = 0.5
+CALIB_DEADZONE_FACTOR = 2.0
+
 # --- Session log (python -m gesture_control.main --log) ------------------------
 SESSION_LOG_NAME = "session-%Y%m%d-%H%M%S.csv"
 SESSION_MARK_KEY = ord("m")
