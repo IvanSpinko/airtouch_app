@@ -1,9 +1,10 @@
 """Typing speed test for stage 4: words per minute with gestures + osk.exe.
 
 Run: ``python -m gesture_control.typing_test`` in a terminal, start AirTouch, open
-the on-screen keyboard with an open palm and click into this terminal. For each
-phrase: press Enter to start the timer, type the phrase with pinches and press
-Enter again. Words per minute use the standard 5 characters = 1 word.
+the on-screen keyboard with a held shaka and click into this terminal. For each
+phrase: press Enter to start the timer, type the phrase (L pose over a key, bend
+the thumb) and press Enter again. Words per minute use the standard
+5 characters = 1 word.
 """
 
 from __future__ import annotations
