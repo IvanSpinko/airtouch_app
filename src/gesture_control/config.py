@@ -304,6 +304,15 @@ KEYBOARD_TOGGLE_HOLD_S = 1.0
 # (UAC prompt) on start. --no-admin skips it (keyboard clicks will not work).
 RUN_AS_ADMIN = True
 
+# Typing test (python -m gesture_control.typing_test)
+CHARS_PER_WORD = 5      # standard WPM definition
+TARGET_WPM = 10         # stage 4 target from the spec
+TYPING_TEST_PHRASES = (
+    "hello world",
+    "the quick brown fox",
+    "gesture control works",
+)
+
 # --- Windows API constants (keyboard) -------------------------------------------
 BASE_DPI = 96
 SW_SHOWNORMAL = 1
