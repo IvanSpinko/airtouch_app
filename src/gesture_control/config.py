@@ -227,11 +227,11 @@ CURSOR_SENSITIVITY = 1.0
 CURSOR_MODE = "relative"
 # Gain applied to hand movement (1.0 = the same speed as absolute mode).
 # Slow hand movement gets ACCEL_MIN_GAIN, fast movement ACCEL_MAX_GAIN.
-ACCEL_MIN_GAIN = 0.25
-ACCEL_MAX_GAIN = 1.6
+ACCEL_MIN_GAIN = 0.3
+ACCEL_MAX_GAIN = 3.0
 # Hand speed (in absolute-mode screen px/s) where acceleration starts / saturates.
-ACCEL_LOW_SPEED_PX_S = 300.0
-ACCEL_HIGH_SPEED_PX_S = 3000.0
+ACCEL_LOW_SPEED_PX_S = 250.0
+ACCEL_HIGH_SPEED_PX_S = 2000.0
 
 # --- Cursor smoothing (One Euro Filter, in screen pixels) ----------------------
 # min_cutoff — lower = stronger jitter smoothing at rest.
@@ -247,7 +247,7 @@ CURSOR_DEADZONE_PX = 3.0
 # (frame heights per second) is ignored; if the jump persists for more than
 # OUTLIER_CONFIRM_FRAMES frames it is real, and the cursor re-anchors there
 # without jumping.
-OUTLIER_SPEED = 4.0
+OUTLIER_SPEED = 6.0
 OUTLIER_CONFIRM_FRAMES = 2
 
 # --- Cursor animation ---------------------------------------------------------
