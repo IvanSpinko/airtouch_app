@@ -96,9 +96,21 @@ def keyboard_rect(screen_w: int, screen_h: int) -> Rect:
     return Rect(round(x), round(y), round(w), round(h))
 
 
+def handle_rect(area: Rect) -> Rect:
+    """Drag handle: a strip along the top edge of the keyboard."""
+    return Rect(area.x, area.y, area.w, config.ONSCREEN_HANDLE_PX)
+
+
 def key_height(area: Rect, lang: str) -> float:
     rows = len(LAYOUTS[lang]) + config.ONSCREEN_SUGGESTION_ROW_UNITS
-    return (area.h - 2 * config.ONSCREEN_PAD_PX) / rows
+    return (area.h - config.ONSCREEN_HANDLE_PX - 2 * config.ONSCREEN_PAD_PX) / rows
+
+
+def moved_area(area: Rect, dx: float, dy: float, screen_w: int, screen_h: int) -> Rect:
+    """``area`` shifted by (dx, dy), kept fully on the screen."""
+    x = min(max(area.x + dx, 0), max(screen_w - area.w, 0))
+    y = min(max(area.y + dy, 0), max(screen_h - area.h, 0))
+    return Rect(x, y, area.w, area.h)
 
 
 def build_keys(lang: str, area: Rect) -> list[Key]:
@@ -116,9 +128,10 @@ def build_keys(lang: str, area: Rect) -> list[Key]:
     keys: list[Key] = []
     sh = kh * config.ONSCREEN_SUGGESTION_ROW_UNITS
     sw = inner_w / config.ONSCREEN_SUGGESTIONS
+    top = area.y + config.ONSCREEN_HANDLE_PX + pad
     for i in range(config.ONSCREEN_SUGGESTIONS):
-        keys.append(Key(SUGGEST, i, cell(area.x + pad + i * sw, area.y + pad, sw, sh)))
-    y = area.y + pad + sh
+        keys.append(Key(SUGGEST, i, cell(area.x + pad + i * sw, top, sw, sh)))
+    y = top + sh
     for row in rows:
         row_w = sum(key_units(k) for k in row) * unit
         x = area.x + pad + (inner_w - row_w) / 2
@@ -280,6 +293,7 @@ class View:
     keys: tuple[Key, ...] = ()
     labels: tuple[str, ...] = ()
     hovered: int | None = None
+    handle_active: bool = False   # cursor on the drag handle or the keyboard is being moved
     flash: int | None = None
     shift: bool = False
     version: int = 0
@@ -303,6 +317,8 @@ class OnscreenKeyboard:
         self.model = KeyboardModel(suggesters)
         self._visible = False
         self._area: Rect | None = None
+        self._screen = (0, 0)
+        self._handle_active = False
         self._keys: list[Key] = []
         self._key_h = 0.0
         self._hovered: int | None = None
@@ -312,6 +328,7 @@ class OnscreenKeyboard:
     # -- geometry / visibility ---------------------------------------------------------
     def set_screen(self, width: int, height: int) -> None:
         with self._lock:
+            self._screen = (width, height)
             self._area = keyboard_rect(width, height)
             self._relayout()
 
@@ -336,6 +353,7 @@ class OnscreenKeyboard:
             if self._visible != value:
                 self._visible = value
                 self._hovered = None
+                self._handle_active = False
                 self._changed()
 
     def toggle(self) -> bool:
@@ -363,6 +381,40 @@ class OnscreenKeyboard:
             if self._hovered is not None:
                 self._hovered = None
                 self._changed()
+
+    def over_handle(self, x: float, y: float) -> bool:
+        """Is (x, y) on the drag handle? Highlights it (and clears the key highlight)."""
+        with self._lock:
+            on = False
+            if self._visible and self._area is not None:
+                h = handle_rect(self._area)
+                m = config.ONSCREEN_HANDLE_MARGIN_PX
+                on = Rect(h.x, h.y - m, h.w, h.h + m).contains(x, y)
+            if on:
+                self.leave()
+            self.set_handle_active(on)
+            return on
+
+    def set_handle_active(self, value: bool) -> None:
+        with self._lock:
+            if self._handle_active != value:
+                self._handle_active = value
+                self._changed()
+
+    def move_by(self, dx: float, dy: float) -> None:
+        """Moves the keyboard (physical pixels), keeping it on the screen."""
+        with self._lock:
+            if self._area is None:
+                return
+            area = moved_area(self._area, dx, dy, *self._screen)
+            if area != self._area:
+                self._area = area
+                self._relayout()
+
+    def on_handle(self, x: float, y: float) -> bool:
+        """Is (x, y) exactly on the handle (for real mouse presses)?"""
+        with self._lock:
+            return self._area is not None and handle_rect(self._area).contains(x, y)
 
     def press(self) -> bool:
         """Presses the highlighted key; False if no key is highlighted."""
@@ -404,7 +456,8 @@ class OnscreenKeyboard:
             return View(
                 visible=self._visible, area=self._area, keys=tuple(self._keys),
                 labels=tuple(self.model.label(k) for k in self._keys),
-                hovered=self._hovered, flash=flash, shift=self.model.shift,
+                hovered=self._hovered, handle_active=self._handle_active, flash=flash,
+                shift=self.model.shift,
                 version=self._version,
             )
 

@@ -98,8 +98,9 @@ def test_hysteresis_keeps_current_key_near_the_border():
     area = keyboard_rect(*SCREEN)
     keys = build_keys("en", area)
     kh = key_height(area, "en")
-    q = next(i for i, k in enumerate(keys) if k.value == "q")
-    w = next(i for i, k in enumerate(keys) if k.value == "w")
+    # only two neighbours, so a key of the next row cannot win
+    keys = [k for k in keys if k.value in ("q", "w")]
+    q, w = 0, 1
     (qx, qy), (wx, _) = keys[q].rect.center, keys[w].rect.center
     just_past_middle = ((qx + wx) / 2 + 2, qy)
     assert choose_key(just_past_middle, keys, area, None, kh) == w
@@ -194,3 +195,30 @@ def test_model_word_tracking():
     m.press(keys[","])
     assert m.word == "" and m.suggestions == []
     assert Rect(0, 0, 10, 10).contains(5, 5)
+
+
+# -- drag handle -------------------------------------------------------------------------
+def test_handle_is_above_the_keys_and_clears_key_highlight():
+    from gesture_control.onscreen import handle_rect
+
+    kb, _ = make_keyboard()
+    view = kb.view()
+    h = handle_rect(view.area)
+    assert all(k.rect.y >= h.y + h.h for k in view.keys)
+    tap_target = view.keys[key_index(kb, "char", "q")].rect.center
+    kb.hover(*tap_target)
+    assert kb.over_handle(h.x + h.w / 2, h.y + h.h / 2)
+    assert kb.view().hovered is None and kb.view().handle_active
+    assert not kb.over_handle(*tap_target) and not kb.view().handle_active
+
+
+def test_move_by_shifts_keys_and_stays_on_screen():
+    kb, _ = make_keyboard()
+    before = kb.view()
+    kb.move_by(-50, -200)
+    after = kb.view()
+    assert after.area.x == before.area.x - 50 and after.area.y == before.area.y - 200
+    assert after.keys[0].rect.x == pytest.approx(before.keys[0].rect.x - 50)
+    kb.move_by(-10_000, 10_000)
+    area = kb.view().area
+    assert area.x == 0 and area.y + area.h == SCREEN[1]

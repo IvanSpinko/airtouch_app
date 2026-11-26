@@ -243,6 +243,10 @@ away; start PyCharm as administrator to keep everything in its console.
 - **Suggestions:** the top row shows 3 words starting with what you typed (word lists in
   `models/words_en.txt`, `models/words_ru.txt`, most frequent first); choosing one finishes the
   word and adds a space.
+- **Move it:** the grey bar along the top edge is a drag handle (it turns blue under the
+  cursor). In the L pose on the handle keep the thumb bent until `MOVE KEYBOARD`, move the
+  hand, straighten the thumb to drop it (`KEYBOARD PLACED`). With the real mouse just drag the
+  handle. The keyboard stays on the screen; it starts at the bottom again on the next run.
 - Sizes, colors, snapping margin and hysteresis are in `config.py` (`ONSCREEN_*`).
 
 ### How to verify
@@ -252,8 +256,9 @@ away; start PyCharm as administrator to keep everything in its console.
 3. In the L pose move over the keys: the cursor snaps from key to key without flicker.
 4. Type `hello world` with thumb bends; after `he` choose a suggestion. Press Enter.
 5. Press **EN** to switch to **RU** and type `привет`; Backspace removes a letter.
-6. Shaka again — the keyboard hides.
-7. **Typing speed:** `python -m gesture_control.typing_test` in a terminal, typing with the
+6. Move the keyboard by its handle to the top of the screen; keys still snap and type there.
+7. Shaka again — the keyboard hides.
+8. **Typing speed:** `python -m gesture_control.typing_test` in a terminal, typing with the
    AirTouch keyboard; compare with 4.3 WPM measured with `osk.exe`.
 
 ## Stage 5 — tray, calibration, settings, .exe

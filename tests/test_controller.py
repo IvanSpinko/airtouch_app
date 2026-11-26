@@ -114,11 +114,26 @@ class Rig:
 
 
 class FakeKeys:
-    """On-screen keyboard covering the bottom half; snaps to (key_x, 750)."""
+    """On-screen keyboard covering the bottom half (snaps to (key_x, 750)) with a drag
+    handle in the 100 px above it."""
 
     def __init__(self):
         self.visible = True
         self.presses = 0
+        self.moved = [0, 0]
+        self.handle_active = False
+
+    def over_handle(self, x, y):
+        on = self.visible and H / 2 - 100 <= y < H / 2
+        self.handle_active = on
+        return on
+
+    def set_handle_active(self, value):
+        self.handle_active = value
+
+    def move_by(self, dx, dy):
+        self.moved[0] += dx
+        self.moved[1] += dy
 
     def hover(self, x, y):
         if not self.visible or y < H / 2:
@@ -159,6 +174,29 @@ def test_no_drag_or_right_click_over_keyboard():
     r.run(LEFT, seconds=config.DRAG_ARM_S + 0.3)
     r.tap(RIGHT)
     assert r.buttons.events == []
+
+
+def test_holding_thumb_on_handle_moves_keyboard():
+    keys = FakeKeys()
+    r = Rig(keys)
+    r.run(L, (0.5, 0.45), seconds=0.5)
+    r.run(LEFT, (0.5, 0.45), seconds=config.DRAG_ARM_S + 0.1)
+    assert r.ctl.last_event[0] == "MOVE KEYBOARD" and keys.moved == [0, 0]
+    r.run(LEFT, (0.3, 0.25), seconds=1.0)
+    assert keys.moved[0] == pytest.approx(-200, abs=3)
+    assert keys.moved[1] == pytest.approx(-200, abs=3)
+    assert r.cursor.target == pytest.approx((0.3 * (W - 1), 0.25 * (H - 1)), abs=3)
+    r.run(L, (0.3, 0.25))
+    assert r.ctl.last_event[0] == "KEYBOARD PLACED" and not keys.handle_active
+    assert r.buttons.events == [] and keys.presses == 0
+
+
+def test_quick_bend_on_handle_does_nothing():
+    keys = FakeKeys()
+    r = Rig(keys)
+    r.run(L, (0.5, 0.45), seconds=0.5)
+    r.tap(LEFT)
+    assert r.buttons.events == [] and keys.presses == 0 and keys.moved == [0, 0]
 
 
 def test_clicks_work_again_when_keyboard_hidden():

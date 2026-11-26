@@ -74,6 +74,9 @@ class KeyTarget(Protocol):
     def hover(self, x: float, y: float) -> tuple[int, int] | None: ...
     def leave(self) -> None: ...
     def press(self) -> bool: ...
+    def over_handle(self, x: float, y: float) -> bool: ...
+    def set_handle_active(self, value: bool) -> None: ...
+    def move_by(self, dx: float, dy: float) -> None: ...
 
 
 class GestureController:
@@ -99,7 +102,9 @@ class GestureController:
       ``on_keyboard_toggle`` (opens / closes the on-screen keyboard).
     - Over the custom on-screen keyboard (``keys``) the cursor snaps to the
       highlighted key, a thumb bend presses that key instead of clicking, and
-      drag and right click are off.
+      drag and right click are off. On the keyboard's drag handle, holding the
+      thumb bent for ``DRAG_ARM_S`` picks the keyboard up; it follows the cursor
+      until the thumb straightens.
 
     OS output goes through ``cursor`` and ``buttons``, so the logic is testable
     without touching the real mouse.
@@ -115,7 +120,10 @@ class GestureController:
         self.buttons = buttons
         self.on_keyboard_toggle = on_keyboard_toggle
         self.keys = keys
-        self._over_keys = False
+        self._over_keys = False     # cursor over the on-screen keyboard (keys or handle)
+        self._over_handle = False
+        self._kb_moving = False
+        self._kb_move_from: tuple[int, int] = (0, 0)
         self.paused = False
         # Last mouse action as (label, time), shown briefly in the preview.
         self.last_event: tuple[str, float] | None = None
@@ -167,6 +175,7 @@ class GestureController:
             self.buttons.release("left")
         self._left_down = False
         self._dragging = False
+        self._stop_keyboard_move()
         self._gesture = Gesture.NONE
         self.cursor.stop_moving()
 
@@ -279,7 +288,10 @@ class GestureController:
             and t - self._bend_since >= config.CLICK_MIN_HOLD_S
             and self._clicks_allowed(t)
         )
-        if gesture is self.left_gesture:
+        if gesture is self.left_gesture and self._kb_moving:
+            self._stop_keyboard_move()
+            self._event("KEYBOARD PLACED", t)
+        elif gesture is self.left_gesture:
             if self._left_down:
                 self.buttons.release("left")
                 self._left_down = False
@@ -289,7 +301,7 @@ class GestureController:
                 self._dragging = False
             elif returned and not self._left_auto_released:
                 if self._over_keys and self.keys is not None:
-                    if self.keys.press():
+                    if not self._over_handle and self.keys.press():
                         self._event("KEY", t)
                 else:
                     self.buttons.click("left")
@@ -307,7 +319,9 @@ class GestureController:
         return math.hypot(dx, dy) > config.DRAG_START_PX
 
     def _hold(self, gesture: Gesture, y: float, t: float) -> None:
-        if gesture is self.left_gesture:
+        if gesture is self.left_gesture and self._over_handle:
+            self._move_keyboard(t)
+        elif gesture is self.left_gesture:
             if not self._left_down:
                 if (not self._left_auto_released and self._clicks_allowed(t)
                         and not self._over_keys
@@ -358,9 +372,36 @@ class GestureController:
 
     def _snapped(self, target: tuple[int, int]) -> tuple[int, int]:
         """Key center when the cursor is over the on-screen keyboard, else ``target``."""
-        center = self.keys.hover(*target) if self.keys is not None else None
+        if self.keys is None:
+            self._over_keys = self._over_handle = False
+            return target
+        self._over_handle = self.keys.over_handle(*target)
+        if self._over_handle:
+            self._over_keys = True
+            return target  # no snapping on the handle
+        center = self.keys.hover(*target)
         self._over_keys = center is not None
         return center if center is not None else target
+
+    def _move_keyboard(self, t: float) -> None:
+        """Thumb held bent on the drag handle: pick the keyboard up, then carry it."""
+        if not self._kb_moving:
+            if self._clicks_allowed(t) and t - self._bend_since >= config.DRAG_ARM_S:
+                self._kb_moving = True
+                self._kb_move_from = self._target
+                self._event("MOVE KEYBOARD", t)
+            return
+        dx = self._target[0] - self._kb_move_from[0]
+        dy = self._target[1] - self._kb_move_from[1]
+        if dx or dy:
+            self.keys.move_by(dx, dy)
+            self._kb_move_from = self._target
+        self.cursor.set_target(*self._target)
+
+    def _stop_keyboard_move(self) -> None:
+        if self._kb_moving and self.keys is not None:
+            self.keys.set_handle_active(False)
+        self._kb_moving = False
 
     def _auto_scroll(self, y: float, t: float) -> None:
         dt, self._scroll_last_t = t - self._scroll_last_t, t

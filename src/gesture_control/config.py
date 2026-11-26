@@ -317,6 +317,11 @@ ONSCREEN_HEIGHT_FRACTION = 0.42
 ONSCREEN_BOTTOM_MARGIN_FRACTION = 0.03
 ONSCREEN_PAD_PX = 10            # window padding, physical px
 ONSCREEN_GAP_FRACTION = 0.08    # gap between keys, share of a key unit
+# Drag handle: a strip along the top edge; it also catches the cursor this far above it.
+ONSCREEN_HANDLE_PX = 36
+ONSCREEN_HANDLE_MARGIN_PX = 16
+ONSCREEN_HANDLE_GRIP_FRACTION = 0.12   # grip bar length, share of the window width
+ONSCREEN_HANDLE_GRIP_PX = 6            # grip bar thickness
 # Key widths in key units (a letter key is 1 unit).
 ONSCREEN_WIDE_KEYS = {"backspace": 2.0, "enter": 2.0, "shift": 1.5, "lang": 1.5, "space": 5.0}
 ONSCREEN_LAYOUT_DEFAULT = "en"
@@ -337,6 +342,7 @@ ONSCREEN_KEY_ACTIVE = "#2e86de"     # highlighted key under the cursor
 ONSCREEN_KEY_PRESSED = "#2ecc71"    # flash after a press
 ONSCREEN_KEY_ON = "#7f8c8d"         # Shift while active
 ONSCREEN_SUGGESTION = "#24303a"
+ONSCREEN_HANDLE = "#8a8a8a"
 ONSCREEN_TEXT = "#ffffff"
 ONSCREEN_RADIUS_FRACTION = 0.12
 ONSCREEN_FONT_FRACTION = 0.38       # label size, share of the key height

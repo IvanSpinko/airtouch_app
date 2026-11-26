@@ -21,7 +21,9 @@ from PyQt6.QtGui import QColor, QFont, QPainter
 from PyQt6.QtWidgets import QApplication, QWidget
 
 from gesture_control import config
-from gesture_control.onscreen import LANG, SHIFT, SUGGEST, OnscreenKeyboard, View
+from gesture_control.onscreen import (
+    LANG, SHIFT, SUGGEST, OnscreenKeyboard, View, handle_rect,
+)
 
 GWL_EXSTYLE = -20
 WS_EX_NOACTIVATE = 0x08000000
@@ -55,6 +57,7 @@ class KeyboardWindow(QWidget):
         self._view = View()
         self._drawn: tuple | None = None
         self._styled = False
+        self._drag_from: tuple[float, float] | None = None  # real-mouse drag, physical px
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.sync)
         self.timer.start(config.ONSCREEN_REFRESH_MS)
@@ -78,7 +81,7 @@ class KeyboardWindow(QWidget):
                     self._styled = True
         elif self.isVisible():
             self.hide()
-        state = (view.version, view.flash)
+        state = (view.version, view.flash, view.handle_active)
         if state != self._drawn:
             self._drawn = state
             self.update()
@@ -109,6 +112,13 @@ class KeyboardWindow(QWidget):
         p.setBrush(QColor(config.ONSCREEN_BACKGROUND))
         radius = config.ONSCREEN_WINDOW_RADIUS_PX
         p.drawRoundedRect(QRectF(self.rect()), radius, radius)
+        # drag handle: a grip bar in the middle of the top strip
+        h = handle_rect(v.area)
+        gw = self.width() * config.ONSCREEN_HANDLE_GRIP_FRACTION
+        gh = config.ONSCREEN_HANDLE_GRIP_PX / r
+        grip = QRectF((self.width() - gw) / 2, (h.h / r - gh) / 2, gw, gh)
+        p.setBrush(QColor(config.ONSCREEN_KEY_ACTIVE if v.handle_active else config.ONSCREEN_HANDLE))
+        p.drawRoundedRect(grip, gh / 2, gh / 2)
         font = QFont()
         for i, key in enumerate(v.keys):
             k = key.rect
@@ -131,11 +141,32 @@ class KeyboardWindow(QWidget):
         p.end()
 
     # -- real mouse ---------------------------------------------------------------------
-    def mousePressEvent(self, event) -> None:
-        v = self._view
-        if v.area is None:
-            return
+    def _physical(self, event) -> tuple[float, float]:
         r = self._ratio()
-        pos = event.position()
-        self.keyboard.press_at(v.area.x + pos.x() * r, v.area.y + pos.y() * r)
+        pos = event.globalPosition()
+        return pos.x() * r, pos.y() * r
+
+    def mousePressEvent(self, event) -> None:
+        if self._view.area is None:
+            return
+        x, y = self._physical(event)
+        if self.keyboard.on_handle(x, y):
+            self._drag_from = (x, y)
+            self.keyboard.set_handle_active(True)
+        else:
+            self.keyboard.press_at(x, y)
         self.sync()
+
+    def mouseMoveEvent(self, event) -> None:
+        if self._drag_from is None:
+            return
+        x, y = self._physical(event)
+        self.keyboard.move_by(x - self._drag_from[0], y - self._drag_from[1])
+        self._drag_from = (x, y)
+        self.sync()
+
+    def mouseReleaseEvent(self, _event) -> None:
+        if self._drag_from is not None:
+            self._drag_from = None
+            self.keyboard.set_handle_active(False)
+            self.sync()
