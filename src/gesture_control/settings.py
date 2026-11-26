@@ -46,6 +46,7 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("SCROLL_AUTO_SPEED", "Scroll speed", 20.0, 200.0, 5.0),
     Setting("CAMERA_INDEX", "Camera number", 0, 5, 1, int),
     Setting("SHOW_PREVIEW", "Show camera window", 0, 1, 1, bool),
+    Setting("CUSTOM_KEYBOARD", "AirTouch keyboard (off = Windows osk.exe)", 0, 1, 1, bool),
 )
 BY_KEY = {s.key: s for s in SETTINGS}
 # config.py values as shipped, for "Reset to defaults".

@@ -53,6 +53,7 @@ def pyinstaller_args(onedir: bool) -> list[str]:
     models = {
         config.HAND_MODEL_PATH: "models",
         config.GESTURE_MODEL_NPZ: "models",
+        **{path: "models" for path in config.WORDS_PATHS.values()},
     }
     missing = [str(p) for p in models if not p.exists()]
     if missing:
