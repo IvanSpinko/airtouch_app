@@ -37,6 +37,11 @@ def is_admin() -> bool:
         return False
 
 
+def admin_wanted() -> bool:
+    """Ask for administrator rights on start? Only osk.exe needs them."""
+    return config.RUN_AS_ADMIN and not config.CUSTOM_KEYBOARD
+
+
 def relaunch_as_admin(args: list[str], module: str = "gesture_control.main") -> bool:
     """Starts this app again elevated (UAC prompt) with the same arguments.
 

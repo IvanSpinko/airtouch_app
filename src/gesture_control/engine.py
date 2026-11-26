@@ -4,6 +4,10 @@
 ``Engine.start()`` runs it in a background thread for the tray app, which reads
 ``snapshot()`` for the indicator and sends commands (enable, pause, keyboard).
 Commands are thread-safe; everything else lives on the engine thread.
+
+The on-screen keyboard is the custom one (``keys``, an ``OnscreenKeyboard`` drawn
+by a Qt window in the main thread) when ``config.CUSTOM_KEYBOARD`` is on and the
+caller provides it; otherwise Windows osk.exe.
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ from gesture_control.gestures import Gesture, GestureClassifier, GestureDetector
 from gesture_control.mouse import (
     CursorAnimator, CursorMapper, Mouse, WorkZone, enable_dpi_awareness, screen_size,
 )
+from gesture_control.onscreen import OnscreenKeyboard
 from gesture_control.preview import draw_preview, recent_event, status_line
 from gesture_control.tracker import HandTracker
 
@@ -49,8 +54,9 @@ class Snapshot:
 
 
 class Engine:
-    def __init__(self, log: bool = False) -> None:
+    def __init__(self, log: bool = False, keys: OnscreenKeyboard | None = None) -> None:
         self.log = log
+        self.keys = keys if config.CUSTOM_KEYBOARD else None
         self.state = ControlState()
         self._commands: queue.Queue[str] = queue.Queue()
         self._stop = threading.Event()
@@ -81,8 +87,18 @@ class Engine:
     def toggle_pause(self) -> None:
         self._commands.put("pause")
 
+    @property
+    def is_running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
     def toggle_keyboard(self) -> None:
-        toggle_keyboard_async()
+        if self.keys is not None:
+            self.keys.toggle()
+        else:
+            toggle_keyboard_async()
+
+    def keyboard_open(self) -> bool:
+        return self.keys.visible if self.keys is not None else keyboard.is_open()
 
     def mark(self) -> None:
         self._commands.put("mark")
@@ -109,7 +125,10 @@ class Engine:
         animator = CursorAnimator(mouse)
         classifier = GestureClassifier.load_if_available()
         detector = GestureDetector(classifier)
-        ctl = GestureController(mapper, animator, mouse, on_keyboard_toggle=toggle_keyboard_async)
+        if self.keys is not None:
+            self.keys.set_screen(width, height)
+        ctl = GestureController(mapper, animator, mouse, on_keyboard_toggle=self.toggle_keyboard,
+                                keys=self.keys)
         fps = FpsCounter()
         logger = None
         if self.log:
@@ -117,8 +136,8 @@ class Engine:
 
             logger = SessionLogger()
             print(f"Logging landmarks and actions to {logger.path} (press m to mark a mistake)")
-        if not keyboard.is_admin():
-            print("Not running as administrator: on-screen keyboard clicks will be blocked by Windows.")
+        if self.keys is None and not keyboard.is_admin():
+            print("Not running as administrator: osk.exe clicks will be blocked by Windows.")
         print(f"Screen {width}x{height}. {config.HOTKEY_TOGGLE} toggles control.")
         print("Gestures:", "trained classifier + rules" if classifier else "rules only (no model yet)")
 
@@ -168,7 +187,7 @@ class Engine:
                         )
 
                     current_fps = fps.tick()
-                    kb_open = keyboard.is_open()
+                    kb_open = self.keyboard_open()
                     self._publish(
                         hand_visible=hand is not None, gesture=gesture.value, enabled=enabled,
                         paused=ctl.paused, keyboard_open=kb_open, fps=current_fps,

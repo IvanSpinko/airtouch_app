@@ -41,3 +41,26 @@ def test_enable_toggle_is_immediate():
     eng = Engine()
     assert eng.toggle_enabled() is False
     assert eng.state.enabled is False
+
+
+def test_custom_keyboard_toggle_and_state(monkeypatch):
+    from gesture_control import config
+    from gesture_control.onscreen import OnscreenKeyboard, Suggester
+
+    keys = OnscreenKeyboard(sender=object(), suggesters={"en": Suggester([])})
+    monkeypatch.setattr(config, "CUSTOM_KEYBOARD", True)
+    eng = Engine(keys=keys)
+    eng.toggle_keyboard()
+    assert keys.visible and eng.keyboard_open()
+    monkeypatch.setattr(config, "CUSTOM_KEYBOARD", False)
+    assert Engine(keys=keys).keys is None  # osk.exe selected
+
+
+def test_admin_only_for_osk(monkeypatch):
+    from gesture_control import config, keyboard
+
+    monkeypatch.setattr(config, "RUN_AS_ADMIN", True)
+    monkeypatch.setattr(config, "CUSTOM_KEYBOARD", True)
+    assert not keyboard.admin_wanted()
+    monkeypatch.setattr(config, "CUSTOM_KEYBOARD", False)
+    assert keyboard.admin_wanted()

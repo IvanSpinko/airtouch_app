@@ -18,6 +18,8 @@ from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from gesture_control import __version__, config, keyboard, settings
 from gesture_control.engine import Engine
+from gesture_control.onscreen import OnscreenKeyboard
+from gesture_control.onscreen_window import KeyboardWindow
 from gesture_control.overlay import Indicator, make_icon, status_of
 
 
@@ -25,7 +27,10 @@ class TrayApp:
     def __init__(self, app: QApplication, log: bool = False) -> None:
         self.app = app
         self.log = log
-        self.engine = Engine(log=log).start()
+        # One keyboard for the whole session; restarted engines reuse it.
+        self.keys = OnscreenKeyboard()
+        self.keyboard_window = KeyboardWindow(self.keys)
+        self.engine = Engine(log=log, keys=self.keys).start()
         self.indicator = Indicator()
         if config.SHOW_INDICATOR:
             self.indicator.show()
@@ -115,7 +120,9 @@ class TrayApp:
         """Applies settings that are read when the engine starts (camera, filters...)."""
         enabled = self.engine.state.enabled
         self.engine.stop(timeout=config.ENGINE_STOP_TIMEOUT_S)
-        self.engine = Engine(log=self.log)
+        if not config.CUSTOM_KEYBOARD:
+            self.keys.set_visible(False)
+        self.engine = Engine(log=self.log, keys=self.keys)
         self.engine.state.set_enabled(enabled)
         self.engine.start()
 
@@ -160,6 +167,10 @@ def self_test() -> int:
     if not QSystemTrayIcon.isSystemTrayAvailable():
         problems.append("system tray not available")
     make_icon(config.STATUS_COLOR_ON)
+    keys = OnscreenKeyboard()
+    if not all(s.words for s in keys.model.suggesters.values()):
+        problems.append("word lists for suggestions missing")
+    KeyboardWindow(keys).deleteLater()
     report = "OK" if not problems else "FAIL: " + "; ".join(problems)
     config.APP_DATA_DIR.mkdir(parents=True, exist_ok=True)
     (config.APP_DATA_DIR / config.SELF_TEST_FILE).write_text(report, encoding="utf-8")
@@ -173,14 +184,14 @@ def main() -> None:
     parser.add_argument("--version", action="version", version=f"{config.APP_NAME} {__version__}")
     parser.add_argument("--log", action="store_true", help="record a session log in data/")
     parser.add_argument("--no-admin", action="store_true",
-                        help="do not ask for administrator rights (keyboard clicks will not work)")
+                        help="do not ask for administrator rights (needed only for osk.exe)")
     parser.add_argument("--self-test", action="store_true",
                         help="check that models and Qt load, write the result and exit")
     args = parser.parse_args()
     settings.load()
     if args.self_test:
         sys.exit(self_test())
-    if config.RUN_AS_ADMIN and not args.no_admin and not keyboard.is_admin():
+    if keyboard.admin_wanted() and not args.no_admin and not keyboard.is_admin():
         # osk.exe ignores input from normal-rights processes (UIPI), see keyboard.py.
         if keyboard.relaunch_as_admin(sys.argv[1:], module="gesture_control.app"):
             return

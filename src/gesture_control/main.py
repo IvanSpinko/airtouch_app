@@ -19,7 +19,36 @@ from gesture_control.engine import Engine
 
 
 def run(log: bool = False) -> None:
-    Engine(log=log).run()
+    if not config.CUSTOM_KEYBOARD:
+        Engine(log=log).run()
+        return
+    # The custom keyboard is a Qt window: Qt runs in this thread, the engine in another.
+    import signal
+
+    from PyQt6.QtCore import QTimer
+    from PyQt6.QtWidgets import QApplication
+
+    from gesture_control.onscreen import OnscreenKeyboard
+    from gesture_control.onscreen_window import KeyboardWindow
+
+    app = QApplication(sys.argv)
+    keys = OnscreenKeyboard()
+    window = KeyboardWindow(keys)  # noqa: F841 - keeps the window alive
+    engine = Engine(log=log, keys=keys).start()
+
+    def check() -> None:  # q / Esc in the preview or a camera error ends the engine
+        if not engine.is_running:
+            app.quit()
+
+    timer = QTimer()
+    timer.timeout.connect(check)  # also lets Python see Ctrl+C
+    timer.start(config.UI_REFRESH_MS)
+    signal.signal(signal.SIGINT, lambda *_: app.quit())
+    app.exec()
+    engine.stop(timeout=config.ENGINE_STOP_TIMEOUT_S)
+    error = engine.snapshot().error
+    if error:
+        raise RuntimeError(error)
 
 
 def main() -> None:
@@ -30,18 +59,18 @@ def main() -> None:
     )
     parser.add_argument(
         "--no-admin", action="store_true",
-        help="do not ask for administrator rights (on-screen keyboard clicks will not work)",
+        help="do not ask for administrator rights (needed only for osk.exe)",
     )
     # set on the elevated copy: it has its own console window, keep it open at the end
     parser.add_argument("--elevated", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     settings.load()
-    if config.RUN_AS_ADMIN and not args.no_admin and not keyboard.is_admin():
+    if keyboard.admin_wanted() and not args.no_admin and not keyboard.is_admin():
         # osk.exe ignores input from normal-rights processes (UIPI), see keyboard.py.
         if keyboard.relaunch_as_admin([*sys.argv[1:], "--elevated"]):
             print("Restarted as administrator in a new window.")
             return
-        print("Administrator rights declined: continuing without on-screen keyboard clicks.")
+        print("Administrator rights declined: continuing without osk.exe clicks.")
     try:
         run(log=args.log)
     except KeyboardInterrupt:
