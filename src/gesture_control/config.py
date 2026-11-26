@@ -305,8 +305,46 @@ OSK_CHECK_RESULT_S = 1.5
 KEYBOARD_GESTURE = "shaka"
 KEYBOARD_TOGGLE_HOLD_S = 1.0
 # osk.exe only accepts our clicks when AirTouch runs as administrator; ask for it
-# (UAC prompt) on start. --no-admin skips it (keyboard clicks will not work).
+# (UAC prompt) on start when osk.exe is the selected keyboard. --no-admin skips it.
 RUN_AS_ADMIN = True
+
+# --- Custom on-screen keyboard (stage 6) ----------------------------------------
+# True: AirTouch's own keyboard (no admin rights needed); False: Windows osk.exe.
+CUSTOM_KEYBOARD = True
+# Window: share of the screen width / height, docked to the bottom with a margin.
+ONSCREEN_WIDTH_FRACTION = 0.9
+ONSCREEN_HEIGHT_FRACTION = 0.42
+ONSCREEN_BOTTOM_MARGIN_FRACTION = 0.03
+ONSCREEN_PAD_PX = 10            # window padding, physical px
+ONSCREEN_GAP_FRACTION = 0.08    # gap between keys, share of a key unit
+# Key widths in key units (a letter key is 1 unit).
+ONSCREEN_WIDE_KEYS = {"backspace": 2.0, "enter": 2.0, "shift": 1.5, "lang": 1.5, "space": 5.0}
+ONSCREEN_LAYOUT_DEFAULT = "en"
+ONSCREEN_SUGGESTIONS = 3
+ONSCREEN_SUGGESTION_ROW_UNITS = 0.8   # suggestion row height, in key heights
+# Cursor snapping: active this far around the keyboard (share of a key height);
+# the highlighted key changes only when another key's center is closer by more
+# than SNAP_HYSTERESIS (share of a key height).
+ONSCREEN_SNAP_MARGIN = 0.5
+ONSCREEN_SNAP_HYSTERESIS = 0.25
+# Word frequency lists, one word per line, most frequent first.
+WORDS_PATHS = {"en": MODELS_DIR / "words_en.txt", "ru": MODELS_DIR / "words_ru.txt"}
+# Look.
+ONSCREEN_BACKGROUND = "#e6181818"
+ONSCREEN_KEY = "#3a3a3a"
+ONSCREEN_KEY_SPECIAL = "#2a2a2a"
+ONSCREEN_KEY_ACTIVE = "#2e86de"     # highlighted key under the cursor
+ONSCREEN_KEY_PRESSED = "#2ecc71"    # flash after a press
+ONSCREEN_KEY_ON = "#7f8c8d"         # Shift while active
+ONSCREEN_SUGGESTION = "#24303a"
+ONSCREEN_TEXT = "#ffffff"
+ONSCREEN_RADIUS_FRACTION = 0.12
+ONSCREEN_FONT_FRACTION = 0.38       # label size, share of the key height
+ONSCREEN_SPECIAL_FONT_SCALE = 0.8   # labels of Shift, Enter, ... and suggestions
+ONSCREEN_WINDOW_RADIUS_PX = 14
+ONSCREEN_PRESS_FLASH_S = 0.15
+ONSCREEN_REFRESH_MS = 16            # window repaint check period
+ONSCREEN_DEMO_EXIT_MS = 60000       # python -m gesture_control.onscreen
 
 # Typing test (python -m gesture_control.typing_test)
 CHARS_PER_WORD = 5      # standard WPM definition
