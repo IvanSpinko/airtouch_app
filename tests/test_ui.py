@@ -48,3 +48,23 @@ def test_indicator_renders_every_state(qapp):
         ind.show_snapshot(snap)
         assert not ind.grab().isNull()
     assert ind.width() == config.INDICATOR_WIDTH
+
+
+# -- custom on-screen keyboard window ---------------------------------------------------
+def test_keyboard_window_follows_keyboard_state_and_paints(qapp):
+    from gesture_control.onscreen import OnscreenKeyboard, Suggester
+    from gesture_control.onscreen_window import KeyboardWindow
+
+    keys = OnscreenKeyboard(sender=object(), suggesters={"en": Suggester([]), "ru": Suggester([])})
+    keys.set_screen(1920, 1080)
+    win = KeyboardWindow(keys)
+    win.sync()
+    assert not win.isVisible()
+    keys.set_visible(True)
+    win.sync()
+    assert win.isVisible() and win.width() > 0
+    assert not win.isActiveWindow()
+    win.grab()  # paints every key without errors
+    keys.set_visible(False)
+    win.sync()
+    assert not win.isVisible()
