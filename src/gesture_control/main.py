@@ -1,5 +1,6 @@
 """Command-line entry point: run AirTouch with the OpenCV preview window.
 
+The status indicator (top-right corner) and the on-screen keyboard are shown too.
 In the L pose (index + thumb straight) the cursor follows the base of the index
 finger; bending the thumb clicks / drags, bending the index right-clicks, two fingers
 scroll, a held fist pauses, a held shaka opens the on-screen keyboard.
@@ -19,10 +20,8 @@ from gesture_control.engine import Engine
 
 
 def run(log: bool = False) -> None:
-    if not config.CUSTOM_KEYBOARD:
-        Engine(log=log).run()
-        return
-    # The custom keyboard is a Qt window: Qt runs in this thread, the engine in another.
+    # The status indicator and the custom keyboard are Qt windows: Qt runs in this
+    # thread, the engine (with the OpenCV camera window) in another.
     import signal
 
     from PyQt6.QtCore import QTimer
@@ -30,18 +29,24 @@ def run(log: bool = False) -> None:
 
     from gesture_control.onscreen import OnscreenKeyboard
     from gesture_control.onscreen_window import KeyboardWindow
+    from gesture_control.overlay import Indicator
 
     app = QApplication(sys.argv)
     keys = OnscreenKeyboard()
     window = KeyboardWindow(keys)  # noqa: F841 - keeps the window alive
+    indicator = Indicator()
+    if config.SHOW_INDICATOR:
+        indicator.show()
     engine = Engine(log=log, keys=keys).start()
 
-    def check() -> None:  # q / Esc in the preview or a camera error ends the engine
-        if not engine.is_running:
+    def tick() -> None:
+        if indicator.isVisible():
+            indicator.show_snapshot(engine.snapshot())
+        if not engine.is_running:  # q / Esc in the preview or a camera error
             app.quit()
 
     timer = QTimer()
-    timer.timeout.connect(check)  # also lets Python see Ctrl+C
+    timer.timeout.connect(tick)  # also lets Python see Ctrl+C
     timer.start(config.UI_REFRESH_MS)
     signal.signal(signal.SIGINT, lambda *_: app.quit())
     app.exec()
