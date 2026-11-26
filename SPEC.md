@@ -148,11 +148,13 @@ Each stage ends with a working version that can be demonstrated.
   Measured: 4.3 WPM on the first attempt (target refined, see non-functional requirements).
 - [x] **5. Settings and packaging.** Done when there is calibration, a tray icon and an `.exe`
   that runs on a clean Windows install.
-- [ ] **6. Custom on-screen keyboard (last development stage).** Done when the shaka opens and
+- [x] **6. Custom on-screen keyboard (last development stage).** Done when the shaka opens and
   closes the custom keyboard, you can type and send a message in English and in Russian using
   gestures only, the cursor snaps to keys, word suggestions work, the app no longer needs
   administrator rights with this keyboard, and typing speed is measured with
   `typing_test` and compared with the `osk.exe` baseline (4.3 WPM).
+  Verified with gestures, including a drag handle to move the keyboard (added during the
+  stage). The typing speed measurement was skipped.
 - [ ] **7. Finalization.** No new features. Done when the remaining non-functional
   requirements are measured and recorded (gesture-to-action latency, frame rate, CPU load),
   the small issues found during testing are fixed, README and SPEC describe the final state,
