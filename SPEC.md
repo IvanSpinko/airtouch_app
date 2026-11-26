@@ -180,7 +180,8 @@ airtouch_app/
 │   ├── controller.py     # gestures -> cursor, clicks, drag, scroll, pause, keyboard
 │   ├── mouse.py          # pynput: cursor, clicks, scroll; pointer acceleration
 │   ├── keyboard.py       # launching and closing osk.exe
-│   ├── onscreen.py       # custom on-screen keyboard (stage 6)
+│   ├── onscreen.py       # custom on-screen keyboard: layouts, snapping, suggestions
+│   ├── onscreen_window.py # PyQt6 window of the custom keyboard
 │   ├── overlay.py        # PyQt6: status indicator, tray icons
 │   ├── dialogs.py        # PyQt6: settings and calibration windows
 │   ├── settings.py       # user settings (%APPDATA%\AirTouch\settings.json)

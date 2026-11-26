@@ -1,7 +1,8 @@
 # AirTouch
 
 Control a Windows PC with hand gestures through a regular webcam: cursor, clicks, scrolling and
-typing on the Windows on-screen keyboard. Everything runs locally — video never leaves the machine.
+typing on an on-screen keyboard built for gestures. Everything runs locally — video never leaves
+the machine.
 
 Full spec: [SPEC.md](SPEC.md).
 
@@ -30,8 +31,10 @@ The command-line version with the camera window:
 python -m gesture_control.main
 ```
 
-Both ask for administrator rights (UAC) so their clicks reach the on-screen keyboard, see
-[Stage 4](#stage-4--on-screen-keyboard); `--no-admin` skips that. `--log` records a session for
+With AirTouch's own keyboard (the default, [Stage 6](#stage-6--custom-on-screen-keyboard))
+no administrator rights are needed. If Windows `osk.exe` is selected in Settings, the app asks
+for them (UAC) so its clicks reach that keyboard, see [Stage 4](#stage-4--on-screen-keyboard);
+`--no-admin` skips that. `--log` records a session for
 [diagnosing false clicks](#diagnosing-false-clicks).
 
 ## Tests
@@ -56,7 +59,8 @@ Every module can be run on its own:
 | `python -m gesture_control.main`        | the app with the camera window                 |
 | `python -m gesture_control.overlay`     | the status indicator with demo states          |
 | `python -m gesture_control.settings`    | current settings and the settings file         |
-| `python -m gesture_control.keyboard`    | open / close the on-screen keyboard            |
+| `python -m gesture_control.keyboard`    | open / close Windows osk.exe                   |
+| `python -m gesture_control.onscreen`    | AirTouch keyboard; click keys with the mouse   |
 | `python -m gesture_control.typing_test` | typing speed test (words per minute)           |
 | `python -m ml.migrate`                  | reuse still-valid old recordings               |
 | `python -m ml.record`                   | record gesture samples for training            |
@@ -193,6 +197,9 @@ uses the rules only.
 
 ## Stage 4 — on-screen keyboard
 
+Since stage 6 `osk.exe` is optional (Settings → untick *AirTouch keyboard*); this section
+describes it.
+
 The Windows on-screen keyboard (`osk.exe`) runs with **high privileges**, and Windows blocks
 clicks, window messages and termination coming from normal programs (UIPI) — verified at the
 start of the stage. Therefore **AirTouch asks for administrator rights on start** (UAC) and
@@ -217,6 +224,37 @@ administrator windows" limitation.
 
 In PyCharm the elevated copy starts in its own console window and PyCharm's run ends right
 away; start PyCharm as administrator to keep everything in its console.
+
+## Stage 6 — custom on-screen keyboard
+
+`osk.exe` is made for a mouse and needs administrator rights, so AirTouch has its own keyboard
+(`onscreen.py`, window in `onscreen_window.py`):
+
+- **Open / close:** hold a **shaka** 🤙 ~1 s (tray menu → On-screen keyboard works too).
+- It sits at the bottom of the screen, always on top, with large keys, and **never takes the
+  focus** — text goes to the window you were typing in.
+- **Snapping:** in the L pose over the keyboard the cursor jumps to the center of the nearest
+  key, which turns blue; it switches to a neighbour only when that one is clearly closer.
+- **Type:** quick thumb bend — the highlighted key flashes green and is typed. No mouse click
+  is sent; drag and right click are off over the keyboard.
+- Keys: letters, digits, `, . ? ! - '`, Space, Backspace, Enter, **Shift** (next letter only),
+  **EN / RU** language switch. Characters are sent as Unicode, so the Windows input language
+  does not matter.
+- **Suggestions:** the top row shows 3 words starting with what you typed (word lists in
+  `models/words_en.txt`, `models/words_ru.txt`, most frequent first); choosing one finishes the
+  word and adds a space.
+- Sizes, colors, snapping margin and hysteresis are in `config.py` (`ONSCREEN_*`).
+
+### How to verify
+
+1. `python -m gesture_control.app` — no UAC prompt.
+2. Open Notepad, hold a shaka ~1 s — the keyboard appears and Notepad keeps the focus.
+3. In the L pose move over the keys: the cursor snaps from key to key without flicker.
+4. Type `hello world` with thumb bends; after `he` choose a suggestion. Press Enter.
+5. Press **EN** to switch to **RU** and type `привет`; Backspace removes a letter.
+6. Shaka again — the keyboard hides.
+7. **Typing speed:** `python -m gesture_control.typing_test` in a terminal, typing with the
+   AirTouch keyboard; compare with 4.3 WPM measured with `osk.exe`.
 
 ## Stage 5 — tray, calibration, settings, .exe
 
@@ -244,7 +282,8 @@ filter / dead zone follow the measured hand tremor. Save applies it immediately.
 ### Settings
 
 Tray → **Settings...**: cursor speed, aiming speed, sensitivity, smoothness, jitter filter,
-dead zone, hold times (drag, keyboard, pause), scroll speed, camera number, camera window.
+dead zone, hold times (drag, keyboard, pause), scroll speed, camera number, camera window,
+keyboard (AirTouch's own or Windows osk.exe).
 They are saved to `%APPDATA%\AirTouch\settings.json` and override `config.py`.
 
 ### Build the .exe
@@ -256,8 +295,8 @@ python -m scripts.build
 Produces `dist\AirTouch.exe` (one file; `--onedir` makes a folder that starts faster) and
 runs its self-test (`AirTouch.exe --self-test`: loads the hand tracker, the gesture model and
 Qt without touching camera or mouse). The MediaPipe hand model and the gesture model are
-bundled, so it works offline; PyTorch is not included. On start the exe asks for
-administrator rights like the source version.
+bundled, so it works offline; PyTorch is not included. Like the source version, the exe
+asks for administrator rights only when osk.exe is selected.
 
 ### How to verify
 
@@ -267,5 +306,5 @@ administrator rights like the source version.
    the indicator appear. (Sandbox has no webcam by default, so the icon turns red with
    "Cannot open camera" — that still proves the exe starts on a clean system. To test with the
    camera, use a `.wsb` config with `<VideoInput>Enable</VideoInput>`.)
-3. On your PC: start `AirTouch.exe`, accept UAC, use the gestures, open Calibrate... and
+3. On your PC: start `AirTouch.exe`, use the gestures, open Calibrate... and
    Settings... from the tray menu.
