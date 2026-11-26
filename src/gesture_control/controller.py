@@ -68,6 +68,14 @@ class ButtonSink(Protocol):
     def scroll(self, ticks: float) -> None: ...
 
 
+class KeyTarget(Protocol):
+    """The custom on-screen keyboard as seen by the controller (onscreen.py)."""
+
+    def hover(self, x: float, y: float) -> tuple[int, int] | None: ...
+    def leave(self) -> None: ...
+    def press(self) -> bool: ...
+
+
 class GestureController:
     """Turns recognized gestures into mouse actions.
 
@@ -89,6 +97,9 @@ class GestureController:
     - FIST held for ``FIST_HOLD_S``: toggles pause.
     - ``KEYBOARD_GESTURE`` (shaka) held for ``KEYBOARD_TOGGLE_HOLD_S``: calls
       ``on_keyboard_toggle`` (opens / closes the on-screen keyboard).
+    - Over the custom on-screen keyboard (``keys``) the cursor snaps to the
+      highlighted key, a thumb bend presses that key instead of clicking, and
+      drag and right click are off.
 
     OS output goes through ``cursor`` and ``buttons``, so the logic is testable
     without touching the real mouse.
@@ -97,11 +108,14 @@ class GestureController:
     def __init__(
         self, mapper: CursorMapper, cursor: CursorSink, buttons: ButtonSink,
         on_keyboard_toggle: Callable[[], None] | None = None,
+        keys: KeyTarget | None = None,
     ) -> None:
         self.mapper = mapper
         self.cursor = cursor
         self.buttons = buttons
         self.on_keyboard_toggle = on_keyboard_toggle
+        self.keys = keys
+        self._over_keys = False
         self.paused = False
         # Last mouse action as (label, time), shown briefly in the preview.
         self.last_event: tuple[str, float] | None = None
@@ -244,7 +258,8 @@ class GestureController:
     def _enter(self, gesture: Gesture, y: float, t: float) -> None:
         if gesture in (self.left_gesture, self.right_gesture):
             # Repeated click during the settle window reuses the same spot (double click).
-            if t >= self._settle_until:
+            # Over the keyboard the cursor already sits on the snapped key center.
+            if t >= self._settle_until and not self._over_keys:
                 ax, ay = self._anchor(t)
                 self.cursor.jump_to(ax, ay)
             self._bend_anchor = self._target
@@ -273,10 +288,14 @@ class GestureController:
                     self._settle_until = t + config.CLICK_SETTLE_S
                 self._dragging = False
             elif returned and not self._left_auto_released:
-                self.buttons.click("left")
-                self._event("LEFT CLICK", t)
+                if self._over_keys and self.keys is not None:
+                    if self.keys.press():
+                        self._event("KEY", t)
+                else:
+                    self.buttons.click("left")
+                    self._event("LEFT CLICK", t)
                 self._settle_until = t + config.CLICK_SETTLE_S
-        elif gesture is self.right_gesture and returned:
+        elif gesture is self.right_gesture and returned and not self._over_keys:
             self.buttons.click("right")
             self._event("RIGHT CLICK", t)
             self._settle_until = t + config.CLICK_SETTLE_S
@@ -291,6 +310,7 @@ class GestureController:
         if gesture is self.left_gesture:
             if not self._left_down:
                 if (not self._left_auto_released and self._clicks_allowed(t)
+                        and not self._over_keys
                         and t - self._bend_since >= config.DRAG_ARM_S):
                     self.buttons.press("left")
                     self._left_down = True
@@ -333,8 +353,14 @@ class GestureController:
             if t < self._settle_until and not self._moved_from_anchor():
                 return  # keep still after a click
             self._settle_until = 0.0
-            self.cursor.set_target(*self._target)
+            self.cursor.set_target(*self._snapped(self._target))
         # any other pose: the cursor stays where it is (clutch released)
+
+    def _snapped(self, target: tuple[int, int]) -> tuple[int, int]:
+        """Key center when the cursor is over the on-screen keyboard, else ``target``."""
+        center = self.keys.hover(*target) if self.keys is not None else None
+        self._over_keys = center is not None
+        return center if center is not None else target
 
     def _auto_scroll(self, y: float, t: float) -> None:
         dt, self._scroll_last_t = t - self._scroll_last_t, t

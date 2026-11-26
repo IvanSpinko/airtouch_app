@@ -89,7 +89,7 @@ class FakeButtons:
 class Rig:
     """Drives a GestureController frame by frame with a simulated clock."""
 
-    def __init__(self):
+    def __init__(self, keys=None):
         self.cursor, self.buttons = FakeCursor(), FakeButtons()
         mapper = CursorMapper(
             W, H, WorkZone(0.0, 0.0, 1.0, 1.0, 1.0), deadzone_px=0.0, mode="absolute"
@@ -98,6 +98,7 @@ class Rig:
         self.ctl = GestureController(
             mapper, self.cursor, self.buttons,
             on_keyboard_toggle=lambda: self.keyboard_calls.append(self.t),
+            keys=keys,
         )
         self.t = 0.0
 
@@ -110,6 +111,64 @@ class Rig:
         """Bend for ``seconds`` and return to the L pose."""
         self.run(gesture, seconds=seconds)
         self.run(L)
+
+
+class FakeKeys:
+    """On-screen keyboard covering the bottom half; snaps to (key_x, 750)."""
+
+    def __init__(self):
+        self.visible = True
+        self.presses = 0
+
+    def hover(self, x, y):
+        if not self.visible or y < H / 2:
+            return None
+        return (round(x / 100) * 100, 750)
+
+    def leave(self):
+        pass
+
+    def press(self):
+        self.presses += 1
+        return True
+
+
+def test_cursor_snaps_to_key_over_keyboard():
+    r = Rig(FakeKeys())
+    r.run(L, (0.52, 0.8), seconds=1.0)
+    assert r.cursor.target == (500, 750)
+    r.run(L, (0.52, 0.2), seconds=1.0)
+    assert r.cursor.target == pytest.approx((520, 200), abs=2)
+
+
+def test_thumb_bend_over_keyboard_presses_key_not_mouse():
+    keys = FakeKeys()
+    r = Rig(keys)
+    r.run(L, (0.5, 0.8), seconds=0.5)
+    r.tap(LEFT)
+    assert keys.presses == 1
+    assert r.buttons.events == []
+    assert r.ctl.last_event[0] == "KEY"
+    assert not any(e[0] == "jump" for e in r.cursor.events)
+
+
+def test_no_drag_or_right_click_over_keyboard():
+    keys = FakeKeys()
+    r = Rig(keys)
+    r.run(L, (0.5, 0.8), seconds=0.5)
+    r.run(LEFT, seconds=config.DRAG_ARM_S + 0.3)
+    r.tap(RIGHT)
+    assert r.buttons.events == []
+
+
+def test_clicks_work_again_when_keyboard_hidden():
+    keys = FakeKeys()
+    r = Rig(keys)
+    r.run(L, (0.5, 0.8), seconds=0.5)
+    keys.visible = False
+    r.run(L, (0.5, 0.8), seconds=0.2)
+    r.tap(LEFT)
+    assert r.buttons.events == [("click", "left")] and keys.presses == 0
 
 
 def test_default_gesture_set():
